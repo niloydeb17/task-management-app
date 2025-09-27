@@ -9,10 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Users, Calendar, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/components/AuthProvider";
 
-export default function TeamsPage() {
+function TeamsPageContent() {
   const { teams, loading, createTeam } = useTeams();
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const { user } = useAuth();
 
   const handleCreateTeam = async (teamData: {
     name: string;
@@ -22,18 +25,18 @@ export default function TeamsPage() {
     await createTeam(teamData);
   };
 
-  const user = {
-    name: "Sam",
-    email: "sam@example.com",
-    teamId: "team-1",
-    role: "Designer"
+  const userData = {
+    name: user?.name || "User",
+    email: user?.email || "",
+    teamId: user?.teamId,
+    role: user?.role || "member"
   };
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Fixed Sidebar */}
       <div className="flex-shrink-0">
-        <TodoistSidebar user={user} />
+        <TodoistSidebar user={userData} />
       </div>
       
       {/* Main Content */}
@@ -122,5 +125,13 @@ export default function TeamsPage() {
         onCreateTeam={handleCreateTeam}
       />
     </div>
+  );
+}
+
+export default function TeamsPage() {
+  return (
+    <ProtectedRoute>
+      <TeamsPageContent />
+    </ProtectedRoute>
   );
 }

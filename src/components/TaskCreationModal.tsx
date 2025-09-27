@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,6 +24,16 @@ import {
   Rocket,
   ChevronDown
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+// Helper function to get cookies
+const getCookie = (name: string): string => {
+  if (typeof document === 'undefined') return '';
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || '';
+  return '';
+};
 
 interface TaskCreationModalProps {
   isOpen: boolean;
@@ -41,13 +51,131 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState<any>(null);
+
+  // Fetch users when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchUsers();
+    }
+  }, [isOpen]);
+
+  const fetchUsers = async () => {
+    try {
+      // First, ensure current user exists in users table
+      await ensureCurrentUserExists();
+      
+      // Then fetch all users
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, avatar')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching users:', error);
+        // Fallback: if database fetch fails, try to get current user from cookies
+        const fallbackUsers = getFallbackUsers();
+        setUsers(fallbackUsers);
+        return;
+      }
+      
+      // If no users found, try fallback
+      if (!data || data.length === 0) {
+        const fallbackUsers = getFallbackUsers();
+        setUsers(fallbackUsers);
+        return;
+      }
+      
+      setUsers(data || []);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      // Fallback: get current user from cookies
+      const fallbackUsers = getFallbackUsers();
+      setUsers(fallbackUsers);
+    }
+  };
+
+  const getFallbackUsers = () => {
+    const name = getCookie('user_name') || '';
+    const email = getCookie('user_email') || '';
+    
+    if (!name || !email) {
+      return [];
+    }
+    
+    return [{
+      id: 'current-user',
+      name,
+      email,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff6b35&color=ffffff&size=128`
+    }];
+  };
+
+  const ensureCurrentUserExists = async () => {
+    try {
+      // Get current user from cookies (Google OAuth)
+      const name = getCookie('user_name') || '';
+      const email = getCookie('user_email') || '';
+      
+      console.log('Checking user from cookies:', { name, email });
+      
+      if (!name || !email) {
+        console.log('No user data found in cookies');
+        return;
+      }
+      
+      // Check if user already exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing user:', checkError);
+        return;
+      }
+      
+      if (existingUser) {
+        console.log('User already exists:', existingUser);
+        return; // User already exists
+      }
+      
+      // Generate UUID for user
+      const userId = crypto.randomUUID();
+      console.log('Creating user profile with ID:', userId);
+      
+      // Create user profile
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          email,
+          name,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff6b35&color=ffffff&size=128`,
+          role: 'member'
+        })
+        .select();
+      
+      if (error) {
+        console.error('Error creating user profile:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      } else {
+        console.log('User profile created successfully:', data);
+      }
+    } catch (err) {
+      console.error('Error ensuring current user exists:', err);
+    }
+  };
 
   const handleCreateTask = () => {
     const newTask = {
       title: taskName,
       description: addDescription ? description : undefined,
       status,
-      assignee,
+      assignee: selectedAssignee?.name || assignee,
+      assignee_id: selectedAssignee?.id || null,
       dueDate,
       priority: priority || 'medium',
       tags,
@@ -67,6 +195,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
     setDueDate("");
     setPriority("");
     setTags([]);
+    setSelectedAssignee(null);
   };
 
   const priorityOptions = [
@@ -204,7 +333,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
                         <PopoverTrigger asChild>
                           <Button variant="outline" size="sm" className="h-9 px-4 border-gray-300 hover:bg-gray-50 whitespace-nowrap text-sm">
                             <User className="w-4 h-4 mr-2" />
-                            Assignee
+                            {selectedAssignee ? selectedAssignee.name : "Assignee"}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-48 p-2">
@@ -213,15 +342,32 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
                               placeholder="Search assignee..."
                               className="h-8"
                             />
-                            <div className="space-y-1">
-                              <Button variant="ghost" size="sm" className="w-full justify-start h-8">
-                                <User className="w-4 h-4 mr-2" />
-                                Sam
-                              </Button>
-                              <Button variant="ghost" size="sm" className="w-full justify-start h-8">
-                                <User className="w-4 h-4 mr-2" />
-                                Sarah
-                              </Button>
+                            <div className="space-y-1 max-h-48 overflow-y-auto">
+                              {users.map((user) => {
+                                const currentUserEmail = getCookie('user_email');
+                                const isCurrentUser = user.email === currentUserEmail;
+                                
+                                return (
+                                  <Button 
+                                    key={user.id}
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className={`w-full justify-start h-8 ${
+                                      isCurrentUser ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                                    }`}
+                                    onClick={() => setSelectedAssignee(user)}
+                                  >
+                                    <User className="w-4 h-4 mr-2" />
+                                    {user.name}
+                                    {isCurrentUser && <span className="ml-auto text-xs">(You)</span>}
+                                  </Button>
+                                );
+                              })}
+                              {users.length === 0 && (
+                                <div className="text-sm text-gray-500 p-2 text-center">
+                                  No users found
+                                </div>
+                              )}
                             </div>
                           </div>
                         </PopoverContent>

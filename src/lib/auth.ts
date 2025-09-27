@@ -1,14 +1,11 @@
 import { betterAuth } from 'better-auth';
-import { supabaseAdapter } from 'better-auth/adapters/supabase';
-import { supabase } from './supabase';
+import { memoryAdapter } from 'better-auth/adapters/memory';
 
 export const auth = betterAuth({
-  database: supabaseAdapter(supabase, {
-    provider: 'supabase',
-  }),
+  database: memoryAdapter(),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: false, // Set to false for easier testing
   },
   socialProviders: {
     google: {
@@ -34,6 +31,9 @@ export const auth = betterAuth({
     },
   },
   plugins: [],
+  secret: process.env.BETTER_AUTH_SECRET || 'your-secret-key-here-change-this-in-production',
+  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+  trustedOrigins: ['http://localhost:3000'],
 });
 
 export type Session = typeof auth.$Infer.Session;

@@ -1,25 +1,37 @@
+'use client';
+
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/components/AuthProvider";
 
-export default function Dashboard() {
-  const user = {
-    name: "Sam",
-    email: "sam@example.com",
-    teamId: undefined,
-    role: "Designer"
+function DashboardContent() {
+  const { user } = useAuth();
+
+  const userData = {
+    name: user?.name || "User",
+    email: user?.email || "",
+    teamId: user?.teamId,
+    role: user?.role || "member"
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50">
       {/* Fixed Sidebar */}
-      <div className="flex-shrink-0">
-        <TodoistSidebar user={user} />
-      </div>
+      <TodoistSidebar user={userData} />
       
       {/* Main Content - Takes remaining space */}
-      <div className="flex-1 overflow-x-auto transition-all duration-150">
-        <TodoistKanban />
+      <div className="ml-64 h-screen overflow-x-auto transition-all duration-150">
+        <TodoistKanban showLoading={false} />
       </div>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

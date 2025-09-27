@@ -8,6 +8,7 @@ export interface Team {
   name: string;
   type: 'design' | 'content' | 'development' | 'marketing' | 'other';
   color: string;
+  position?: number; // Added position field
   board_template: {
     columns: Array<{
       id: string;
@@ -55,10 +56,23 @@ export function useTeams() {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      // Try to fetch with position first, fallback to created_at if position column doesn't exist
+      let { data, error: fetchError } = await supabase
         .from('teams')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('position', { ascending: true });
+
+      // If position column doesn't exist, fallback to created_at ordering
+      if (fetchError && fetchError.message.includes('position')) {
+        console.log('Position column not found, using created_at ordering');
+        const fallbackResult = await supabase
+          .from('teams')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        data = fallbackResult.data;
+        fetchError = fallbackResult.error;
+      }
 
       if (fetchError) {
         console.error('Error fetching teams:', fetchError);
@@ -169,9 +183,102 @@ export function useTeams() {
     }
   };
 
-  // Load teams on mount
+  // Update team positions (for reordering)
+  const updateTeamPositions = async (teamUpdates: Array<{ id: string; position: number }>): Promise<boolean> => {
+    try {
+      setError(null);
+
+      // Update each team's position
+      for (const update of teamUpdates) {
+        const { error: updateError } = await supabase
+          .from('teams')
+          .update({ 
+            position: update.position,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', update.id);
+
+        if (updateError) {
+          // If position column doesn't exist, just update the timestamp
+          if (updateError.message.includes('position')) {
+            console.log(`Position column not found, updating timestamp only for team ${update.id}`);
+            
+            const { error: timestampError } = await supabase
+              .from('teams')
+              .update({ 
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', update.id);
+            
+            if (timestampError) {
+              console.error(`Error updating team ${update.id}:`, timestampError);
+              throw new Error(`Failed to update team: ${timestampError.message}`);
+            }
+          } else {
+            console.error(`Error updating team ${update.id} position:`, updateError);
+            throw new Error(`Failed to update team position: ${updateError.message}`);
+          }
+        }
+      }
+
+      // Update local state
+      setTeams(prev => prev.map(team => {
+        const update = teamUpdates.find(u => u.id === team.id);
+        return update ? { ...team, position: update.position } : team;
+      }));
+
+      return true;
+    } catch (err) {
+      console.error('Update team positions error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    }
+  };
+
+  // Load teams on mount and set up real-time subscriptions
   useEffect(() => {
     fetchTeams();
+
+    // Set up real-time subscription for teams table
+    const teamsSubscription = supabase
+      .channel('teams-changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'teams' 
+        }, 
+        (payload) => {
+          console.log('🔄 Real-time teams update:', payload);
+          
+          if (payload.eventType === 'UPDATE') {
+            // Handle team updates (including position changes)
+            setTeams(prev => {
+              const updatedTeams = prev.map(team => 
+                team.id === payload.new.id ? { ...team, ...payload.new } : team
+              );
+              
+              // Sort by position after update
+              return updatedTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
+            });
+          } else if (payload.eventType === 'INSERT') {
+            // Handle new team creation
+            setTeams(prev => {
+              const newTeams = [...prev, payload.new];
+              return newTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
+            });
+          } else if (payload.eventType === 'DELETE') {
+            // Handle team deletion
+            setTeams(prev => prev.filter(team => team.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      teamsSubscription.unsubscribe();
+    };
   }, []);
 
   return {
@@ -181,6 +288,7 @@ export function useTeams() {
     createTeam,
     updateTeam,
     deleteTeam,
+    updateTeamPositions,
     refetch: fetchTeams
   };
 }

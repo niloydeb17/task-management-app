@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Users, Zap, BarChart3, Shield, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { AuthTest } from "@/components/AuthTest";
+import { GoogleAuthTest } from "@/components/GoogleAuthTest";
 
 export default function Home() {
   return (
@@ -64,6 +66,14 @@ export default function Home() {
               Watch Demo
             </Button>
           </div>
+        </div>
+      </section>
+
+      {/* Auth Test Section - Temporary for testing */}
+      <section className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <AuthTest />
+          <GoogleAuthTest />
         </div>
       </section>
 

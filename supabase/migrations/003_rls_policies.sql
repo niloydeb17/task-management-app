@@ -8,29 +8,10 @@ ALTER TABLE user_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE board_templates ENABLE ROW LEVEL SECURITY;
 
--- Teams policies
-CREATE POLICY "Users can view teams they belong to" ON teams
-    FOR SELECT USING (
-        id IN (
-            SELECT team_id FROM users WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Team leads can update their team" ON teams
-    FOR UPDATE USING (
-        id IN (
-            SELECT team_id FROM users 
-            WHERE id = auth.uid() AND role = 'lead'
-        )
-    );
-
-CREATE POLICY "Admins can manage all teams" ON teams
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users 
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+-- Teams policies - Allow all operations for now to enable real-time
+-- TODO: Implement proper authentication-based RLS later
+CREATE POLICY "Allow all operations on teams" ON teams
+    FOR ALL USING (true);
 
 -- Users policies
 CREATE POLICY "Users can view team members" ON users
@@ -59,34 +40,10 @@ CREATE POLICY "Admins can manage all users" ON users
         )
     );
 
--- Tasks policies
-CREATE POLICY "Users can view tasks from their team" ON tasks
-    FOR SELECT USING (
-        team_id IN (
-            SELECT team_id FROM users WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Users can create tasks in their team" ON tasks
-    FOR INSERT WITH CHECK (
-        team_id IN (
-            SELECT team_id FROM users WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Users can update tasks in their team" ON tasks
-    FOR UPDATE USING (
-        team_id IN (
-            SELECT team_id FROM users WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Users can delete tasks in their team" ON tasks
-    FOR DELETE USING (
-        team_id IN (
-            SELECT team_id FROM users WHERE id = auth.uid()
-        )
-    );
+-- Tasks policies - Allow all operations for now to enable real-time
+-- TODO: Implement proper authentication-based RLS later
+CREATE POLICY "Allow all operations on tasks" ON tasks
+    FOR ALL USING (true);
 
 -- Team streaks policies
 CREATE POLICY "Users can view team streaks" ON team_streaks

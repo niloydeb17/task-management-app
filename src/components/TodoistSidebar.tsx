@@ -3,13 +3,16 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { DndContext, DragEndEvent, DragStartEvent, closestCenter } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
-  Plus, 
-  Search,
+  Plus,
   Inbox,
   Calendar,
   Clock,
@@ -40,15 +43,15 @@ interface TodoistSidebarProps {
 
 export function TodoistSidebar({ user }: TodoistSidebarProps) {
   const pathname = usePathname();
-  const { teams, loading: teamsLoading, createTeam, updateTeam, deleteTeam } = useTeams();
+  const { teams, loading: teamsLoading, createTeam, updateTeam, deleteTeam, updateTeamPositions } = useTeams();
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
+  const [activeTeam, setActiveTeam] = useState<any>(null);
 
   const quickActions = [
-    { label: "Add task", icon: Plus, href: "#" },
-    { label: "Search", icon: Search, href: "#" },
+    // Removed Add task and Search buttons
   ];
 
   const mainSections = [
@@ -92,23 +95,76 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
     await deleteTeam(teamId);
   };
 
+  // Handle drag start
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const team = teams.find(t => t.id === active.id);
+    setActiveTeam(team || null);
+  };
+
+  // Handle drag end
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over) {
+      setActiveTeam(null);
+      return;
+    }
+    
+    const activeTeam = teams.find(t => t.id === active.id);
+    const overTeam = teams.find(t => t.id === over.id);
+    
+    if (!activeTeam || !overTeam || activeTeam.id === overTeam.id) {
+      setActiveTeam(null);
+      return;
+    }
+    
+    const activeIndex = teams.findIndex(t => t.id === activeTeam.id);
+    const overIndex = teams.findIndex(t => t.id === overTeam.id);
+    
+    // Reorder teams
+    const newTeams = arrayMove(teams, activeIndex, overIndex);
+    
+    // Update positions
+    const updatedTeams = newTeams.map((team, index) => ({
+      ...team,
+      position: index
+    }));
+    
+    // Update database
+    try {
+      const teamUpdates = updatedTeams.map((team, index) => ({
+        id: team.id,
+        position: index
+      }));
+      
+      await updateTeamPositions(teamUpdates);
+      console.log('✅ Team order updated successfully!');
+    } catch (err) {
+      console.error('❌ Failed to update team order:', err);
+      alert('Failed to save team order. Please try again.');
+    }
+    
+    setActiveTeam(null);
+  };
+
   return (
     <div 
-      className="bg-white border-r border-gray-200 h-screen flex flex-col w-64"
+      className="bg-white border-r border-gray-200 h-screen flex flex-col w-64 fixed left-0 top-0 overflow-hidden"
     >
       {/* User Profile */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           <Avatar className="w-8 h-8">
-            <AvatarImage src="/placeholder-avatar.jpg" />
+            <AvatarImage src="" />
             <AvatarFallback className="bg-blue-500 text-white text-sm">
-              {user?.name?.charAt(0) || "S"}
+              {"M"}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
             <div className="flex items-center space-x-1">
               <span className="text-sm font-medium text-gray-900">
-                {user?.name || "Sam"}
+                MoreTaasks
               </span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </div>
@@ -116,25 +172,7 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="p-4 space-y-2">
-        {quickActions.map((action) => {
-          const Icon = action.icon;
-          return (
-            <Button
-              key={action.label}
-              variant="outline"
-              className="w-full justify-start text-gray-600 hover:text-gray-900"
-              asChild
-            >
-              <Link href={action.href}>
-                <Icon className="w-4 h-4 mr-2" />
-                {action.label}
-              </Link>
-            </Button>
-          );
-        })}
-      </div>
+      {/* Quick Actions section removed */}
 
       {/* Main Sections */}
       <div className="px-4 pb-4">
@@ -210,7 +248,7 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
       </div>
 
       {/* Teams */}
-      <div className="px-4 pb-4 flex-1">
+      <div className="px-4 pb-4 flex-1 overflow-y-auto">
         <div className="space-y-1">
           <div className="flex items-center justify-between px-3 py-2">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -233,52 +271,27 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
               No teams yet. Create one to get started!
             </div>
           ) : (
-            teams.map((team) => {
-              const isActive = pathname === `/team/${team.id}`;
-              
-              return (
-                <Link
-                  key={team.id}
-                  href={`/team/${team.id}`}
-                  className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors group ${
-                    isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <FolderOpen className="w-4 h-4" />
-                    <span>#{team.name}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreHorizontal className="w-4 h-4 text-gray-400" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => handleEditTeam(team)}>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit Team
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteTeam(team)}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete Team
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </Link>
-              );
-            })
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext 
+                items={teams.map(team => team.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {teams.map((team) => (
+                  <SortableTeamItem
+                    key={team.id}
+                    team={team}
+                    pathname={pathname}
+                    onEditTeam={handleEditTeam}
+                    onDeleteTeam={handleDeleteTeam}
+                    isActive={activeTeam?.id === team.id}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </div>
@@ -316,6 +329,97 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
         onDeleteTeam={handleConfirmDelete}
         team={selectedTeam}
       />
+    </div>
+  );
+}
+
+// Sortable Team Item Component
+interface SortableTeamItemProps {
+  team: any;
+  pathname: string;
+  onEditTeam: (team: any) => void;
+  onDeleteTeam: (team: any) => void;
+  isActive: boolean;
+}
+
+function SortableTeamItem({ team, pathname, onEditTeam, onDeleteTeam, isActive }: SortableTeamItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: team.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const isLinkActive = pathname === `/team/${team.id}`;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors group cursor-grab active:cursor-grabbing ${
+        isLinkActive
+          ? "bg-blue-50 text-blue-700"
+          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+      } ${isDragging ? 'opacity-50 shadow-lg' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
+      {/* Team link */}
+      <Link
+        href={`/team/${team.id}`}
+        className="flex items-center space-x-3 flex-1"
+        onClick={(e) => {
+          // Prevent navigation when dragging
+          if (isDragging) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <FolderOpen className="w-4 h-4" />
+        <span>#{team.name}</span>
+      </Link>
+      
+      {/* Dropdown menu */}
+      <div 
+        className="flex items-center space-x-2"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="w-4 h-4 text-gray-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => onEditTeam(team)}>
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Team
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => onDeleteTeam(team)}
+              className="text-red-600 focus:text-red-600"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Team
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

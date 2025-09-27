@@ -181,6 +181,57 @@ export function SimpleKanbanBoard() {
     fetchData();
   }, []);
 
+  // Real-time subscription for task updates
+  useEffect(() => {
+    console.log('Setting up real-time subscription for tasks');
+
+    const subscription = supabase
+      .channel('simple-task-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'tasks'
+        },
+        (payload) => {
+          console.log('Real-time task update received in SimpleKanbanBoard:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New task created
+            const newTask = payload.new as Task;
+            setTasks(prev => {
+              // Check if task already exists to avoid duplicates
+              const exists = prev.some(task => task.id === newTask.id);
+              if (exists) return prev;
+              return [newTask, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            // Task updated
+            const updatedTask = payload.new as Task;
+            setTasks(prev => prev.map(task => 
+              task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            // Task deleted
+            const deletedTask = payload.old as Task;
+            setTasks(prev => prev.filter(task => task.id !== deletedTask.id));
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        console.log('SimpleKanbanBoard real-time subscription status:', status, err);
+        if (err) {
+          console.error('SimpleKanbanBoard real-time subscription error:', err);
+        }
+      });
+
+    return () => {
+      console.log('Cleaning up SimpleKanbanBoard real-time subscription');
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -234,10 +285,27 @@ export function SimpleKanbanBoard() {
     
     // Update task in database for real data
     try {
+      // Find the target column details to update status
+      const targetColumn = columns.find(col => col.id === overColumnId);
+      const newStatus = targetColumn ? {
+        id: targetColumn.id,
+        name: targetColumn.name,
+        color: targetColumn.color,
+        order: 0,
+        isCompleted: targetColumn.name.toLowerCase().includes('done') || targetColumn.name.toLowerCase().includes('complete')
+      } : {
+        id: overColumnId,
+        name: overColumnId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        color: '#6B7280',
+        order: 0,
+        isCompleted: false
+      };
+
       const { error } = await supabase
         .from('tasks')
         .update({ 
           column_id: overColumnId,
+          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', activeTask.id);
@@ -247,9 +315,12 @@ export function SimpleKanbanBoard() {
       // Update local state
       setTasks(prev => prev.map(task => 
         task.id === activeTask.id 
-          ? { ...task, column_id: overColumnId }
+          ? { ...task, column_id: overColumnId, status: newStatus }
           : task
       ));
+      
+      console.log('✅ Task moved successfully!');
+      console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
       
     } catch (err) {
       console.error('Failed to update task:', err);

@@ -169,10 +169,27 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     
     // Update task in database
     try {
+      // Find the target column details to update status
+      const targetColumn = columns.find(col => col.id === overColumnId);
+      const newStatus = targetColumn ? {
+        id: targetColumn.id,
+        name: targetColumn.name,
+        color: targetColumn.color,
+        order: 0,
+        isCompleted: targetColumn.name.toLowerCase().includes('done') || targetColumn.name.toLowerCase().includes('complete')
+      } : {
+        id: overColumnId,
+        name: overColumnId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        color: '#6B7280',
+        order: 0,
+        isCompleted: false
+      };
+
       const { error } = await supabase
         .from('tasks')
         .update({ 
           column_id: overColumnId,
+          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', activeTask.id);
@@ -182,9 +199,12 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
       // Update local state
       setTasks(prev => prev.map(task => 
         task.id === activeTask.id 
-          ? { ...task, column_id: overColumnId }
+          ? { ...task, column_id: overColumnId, status: newStatus }
           : task
       ));
+      
+      console.log('✅ Task moved successfully!');
+      console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
       
     } catch (err) {
       console.error('Failed to update task:', err);

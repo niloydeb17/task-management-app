@@ -64,6 +64,7 @@ export interface Database {
           type: 'design' | 'content' | 'development' | 'marketing' | 'other';
           color: string;
           board_template: any; // JSON
+          position?: number; // Added position field
           created_at: string;
           updated_at: string;
         };
@@ -73,6 +74,7 @@ export interface Database {
           type: 'design' | 'content' | 'development' | 'marketing' | 'other';
           color?: string;
           board_template?: any;
+          position?: number; // Added position field
           created_at?: string;
           updated_at?: string;
         };
@@ -82,6 +84,7 @@ export interface Database {
           type?: 'design' | 'content' | 'development' | 'marketing' | 'other';
           color?: string;
           board_template?: any;
+          position?: number; // Added position field
           created_at?: string;
           updated_at?: string;
         };
@@ -96,10 +99,16 @@ export interface Database {
           assignee_id?: string;
           team_id: string;
           column_id: string;
+          position?: number; // Added position field
           tags: string[];
           attachments: any[]; // JSON
           comments: any[]; // JSON
           handoff_history: any[]; // JSON
+          handoff_status?: string;
+          source_team_id?: string;
+          handoff_notes?: string;
+          handoff_requirements?: string[];
+          handoff_at?: string;
           created_at: string;
           updated_at: string;
           due_date?: string;
@@ -114,10 +123,16 @@ export interface Database {
           assignee_id?: string;
           team_id: string;
           column_id: string;
+          position?: number; // Added position field
           tags?: string[];
           attachments?: any[];
           comments?: any[];
           handoff_history?: any[];
+          handoff_status?: string;
+          source_team_id?: string;
+          handoff_notes?: string;
+          handoff_requirements?: string[];
+          handoff_at?: string;
           created_at?: string;
           updated_at?: string;
           due_date?: string;
@@ -132,10 +147,16 @@ export interface Database {
           assignee_id?: string;
           team_id?: string;
           column_id?: string;
+          position?: number; // Added position field
           tags?: string[];
           attachments?: any[];
           comments?: any[];
           handoff_history?: any[];
+          handoff_status?: string;
+          source_team_id?: string;
+          handoff_notes?: string;
+          handoff_requirements?: string[];
+          handoff_at?: string;
           created_at?: string;
           updated_at?: string;
           due_date?: string;

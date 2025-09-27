@@ -32,7 +32,6 @@ import { supabase } from "@/lib/supabase";
 import { TaskCreationModal } from "@/components/TaskCreationModal";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { SectionCreationModal } from "@/components/SectionCreationModal";
-import { ColumnEditModal } from "@/components/ColumnEditModal";
 import { HandoffService } from "@/lib/handoff";
 import { HandoffForm } from "@/types";
 
@@ -63,10 +62,9 @@ interface Column {
 
 interface TodoistKanbanProps {
   teamId?: string;
-  showLoading?: boolean; // Add prop to control loading display
 }
 
-export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps) {
+export function TodoistKanban({ teamId }: TodoistKanbanProps) {
   const { user } = useAuth();
   
   // Debug user data
@@ -80,11 +78,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
-  const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
-  const [isColumnEditModalOpen, setIsColumnEditModalOpen] = useState(false);
-  const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedColumn, setSelectedColumn] = useState<any>(null);
+  const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
   const [teams, setTeams] = useState<Array<{ id: string; name: string; type: string; color: string }>>([]);
   const [currentTeam, setCurrentTeam] = useState<{ id: string; name: string; type: string; color: string } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
@@ -92,14 +87,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
     position: number;
     show: boolean;
   } | null>(null);
-  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const refreshData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
         
         // Get team data
         let teamsQuery = supabase
@@ -466,7 +458,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           // Get tasks from database
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
-            .select('id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status')
+            .select('id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at')
             .eq('team_id', teamData.id)
             .order('position', { ascending: true });
           
@@ -478,8 +470,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           console.log('Real tasks loaded:', { 
             count: dbTasksData?.length, 
             sample: dbTasksData?.[0],
-            teamId: teamData.id,
-            statusInfo: dbTasksData?.map(task => ({ id: task.id, title: task.title, column_id: task.column_id, status: task.status }))
+            teamId: teamData.id 
           });
           
           // Transform database tasks to match UI expectations
@@ -522,102 +513,66 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         setLoading(false);
       }
     };
+  };
 
-    fetchData();
+  useEffect(() => {
+    refreshData();
   }, []);
 
-  // Comprehensive real-time subscription for all Kanban operations
+  useEffect(() => {
+    refreshData();
+  }, [teamId]);
+
+  // Real-time subscription for task updates
   useEffect(() => {
     if (!currentTeam?.id) return;
 
-    const channel = supabase
-      .channel(`kanban-realtime-${currentTeam.id}`)
+    const subscription = supabase
+      .channel(`task-changes-${currentTeam.id}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'tasks',
           filter: `team_id=eq.${currentTeam.id}`
         },
         (payload) => {
-          console.log('Real-time task update:', payload.eventType, payload);
-          setLastUpdate(new Date());
+          console.log('Real-time update received:', payload.eventType, payload);
           
           if (payload.eventType === 'INSERT') {
             // New task created
             const newTask = payload.new as Task;
             setTasks(prev => {
+              // Check if task already exists to avoid duplicates
               const exists = prev.some(task => task.id === newTask.id);
               if (exists) return prev;
-              console.log('✅ Adding new task via real-time:', newTask.title);
+              console.log('Adding new task via real-time:', newTask);
               return [newTask, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
-            // Task updated (moved, edited, etc.)
+            // Task updated
             const updatedTask = payload.new as Task;
-            console.log('✅ Updating task via real-time:', updatedTask.title);
+            console.log('Updating task via real-time:', updatedTask);
             setTasks(prev => prev.map(task => 
               task.id === updatedTask.id ? { ...task, ...updatedTask } : task
             ));
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
             const deletedTask = payload.old as Task;
-            console.log('✅ Deleting task via real-time:', deletedTask.title);
+            console.log('Deleting task via real-time:', deletedTask.id);
             setTasks(prev => prev.filter(task => task.id !== deletedTask.id));
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'teams',
-          filter: `id=eq.${currentTeam.id}`
-        },
-        (payload) => {
-          console.log('Real-time team update:', payload);
-          setLastUpdate(new Date());
-          
-          // Team's board_template was updated (columns added/edited/deleted)
-          if (payload.new && payload.new.board_template) {
-            const boardTemplate = payload.new.board_template;
-            const templateColumns = boardTemplate.columns || [];
-            
-            if (templateColumns.length > 0) {
-              const sortedColumns = templateColumns.sort((a: any, b: any) => a.order - b.order);
-              const columnsData = sortedColumns.map((col: any, index: number) => ({
-                id: col.id,
-                name: col.name,
-                color: col.color,
-                position: col.order || index
-              }));
-              console.log('✅ Updating columns via real-time:', columnsData.map(c => c.name));
-              setColumns(columnsData);
-            }
-          }
-        }
-      )
       .subscribe((status, err) => {
-        console.log('Real-time subscription status:', status);
         if (err) {
           console.error('Real-time subscription error:', err);
-          setRealtimeStatus('disconnected');
-        } else {
-          if (status === 'SUBSCRIBED') {
-            setRealtimeStatus('connected');
-            console.log('✅ Real-time connected successfully!');
-          } else if (status === 'CHANNEL_ERROR') {
-            setRealtimeStatus('disconnected');
-          } else if (status === 'TIMED_OUT') {
-            setRealtimeStatus('disconnected');
-          }
         }
       });
 
     return () => {
-      channel.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [currentTeam?.id]);
 
@@ -629,7 +584,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       try {
         const { data: latestTasks, error } = await supabase
           .from('tasks')
-          .select('id, title, description, priority, column_id, tags, due_date, created_at, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, position, updated_at, status')
+          .select('id, title, description, priority, column_id, tags, due_date, created_at, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, position, updated_at')
           .eq('team_id', currentTeam.id)
           .order('updated_at', { ascending: false });
 
@@ -669,36 +624,6 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       clearInterval(pollInterval);
     };
   }, [currentTeam?.id]);
-
-  const refreshColumns = async () => {
-    if (!currentTeam?.id) return;
-    
-    try {
-      const { data: teamData, error } = await supabase
-        .from('teams')
-        .select('board_template')
-        .eq('id', currentTeam.id)
-        .single();
-
-      if (error) throw error;
-
-      const boardTemplate = teamData.board_template || {};
-      const templateColumns = boardTemplate.columns || [];
-      
-      if (templateColumns.length > 0) {
-        const sortedColumns = templateColumns.sort((a: any, b: any) => a.order - b.order);
-        const columnsData = sortedColumns.map((col: any, index: number) => ({
-          id: col.id,
-          name: col.name,
-          color: col.color,
-          position: col.order || index
-        }));
-        setColumns(columnsData);
-      }
-    } catch (error) {
-      console.error('Error refreshing columns:', error);
-    }
-  };
 
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
@@ -798,70 +723,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         // Update positions
         const updatedColumns = newColumns.map((col, index) => ({
           ...col,
-          position: index,
-          order: index // Also update the order field for database consistency
+          position: index
         }));
         
-        // Update local state immediately for responsive UI
         setColumns(updatedColumns);
-        console.log('Columns reordered locally:', updatedColumns.map(c => c.name));
-        
-        // Update database if we have a real team (not dummy data)
-        if (currentTeam?.id && !currentTeam.id.startsWith('dummy-')) {
-          try {
-            console.log('Saving column order to database...');
-            
-            // Get current team data
-            const { data: team, error: teamError } = await supabase
-              .from("teams")
-              .select("board_template")
-              .eq("id", currentTeam.id)
-              .single();
-
-            if (teamError) throw teamError;
-
-            const currentTemplate = team.board_template || {};
-            
-            // Update the columns in the board template with new order
-            const updatedTemplate = {
-              ...currentTemplate,
-              columns: updatedColumns.map(col => ({
-                id: col.id,
-                name: col.name,
-                color: col.color,
-                order: col.position,
-                isHandoffColumn: col.isHandoffColumn || false,
-                targetTeamId: col.targetTeamId
-              }))
-            };
-
-            // Save to database
-            const { error: updateError } = await supabase
-              .from("teams")
-              .update({ 
-                board_template: updatedTemplate,
-                updated_at: new Date().toISOString()
-              })
-              .eq("id", currentTeam.id);
-
-            if (updateError) throw updateError;
-
-            console.log('✅ Column order saved to database successfully!');
-            console.log('🔄 Real-time update will sync across all connected clients');
-            
-          } catch (err) {
-            console.error('❌ Failed to save column order to database:', err);
-            
-            // Revert local state on error
-            setColumns(columns);
-            console.log('🔄 Reverted column order due to database error');
-            
-            // Show user-friendly error message
-            alert('Failed to save column order. Please try again.');
-          }
-        } else {
-          console.log('💡 Column reordering completed (dummy data - no database update needed)');
-        }
+        console.log('Columns reordered:', updatedColumns.map(c => c.name));
       }
       return;
     }
@@ -948,10 +814,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         
         console.log('Attempting to update task positions:', updates);
         
-        // Update position in database
+        // Try to update position in database, fallback to timestamp only if column doesn't exist
         for (const update of updates) {
           console.log(`Updating task ${update.id} to position ${update.position}`);
           
+          // First try to update with position
           const { error: positionError } = await supabase
             .from('tasks')
             .update({ 
@@ -961,8 +828,25 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             .eq('id', update.id);
           
           if (positionError) {
-            console.error(`Error updating task ${update.id} position:`, positionError);
-            throw positionError;
+            // If position column doesn't exist, just update timestamp
+            if (positionError.message.includes('position') || positionError.message.includes('column')) {
+              console.log(`Position column not found, updating timestamp only for task ${update.id}`);
+              
+              const { error: timestampError } = await supabase
+                .from('tasks')
+                .update({ 
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', update.id);
+              
+              if (timestampError) {
+                console.error(`Error updating task ${update.id}:`, timestampError);
+                throw timestampError;
+              }
+            } else {
+              console.error(`Error updating task ${update.id}:`, positionError);
+              throw positionError;
+            }
           } else {
             console.log(`Successfully updated task ${update.id} with position ${update.position}`);
           }
@@ -973,9 +857,6 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           const updatedTask = updatedTasks.find(ut => ut.id === task.id);
           return updatedTask || task;
         }));
-        
-        console.log('✅ Task reordering completed successfully!');
-        console.log('🔄 Real-time update will sync across all connected clients');
         
       } catch (err) {
         console.error('Failed to reorder tasks - Raw error:', err);
@@ -1046,38 +927,12 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       
       // Update database for real data
       try {
-        // Find the target column details to update status
-        const targetColumn = columns.find(col => col.id === overColumnId);
-        const newStatus = targetColumn ? {
-          id: targetColumn.id,
-          name: targetColumn.name,
-          color: targetColumn.color,
-          order: targetColumn.position || 0,
-          isCompleted: targetColumn.name.toLowerCase().includes('done') || targetColumn.name.toLowerCase().includes('complete')
-        } : {
-          id: overColumnId,
-          name: overColumnId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          color: '#6B7280',
-          order: 0,
-          isCompleted: false
-        };
-
-        console.log('🔄 Updating task status:', {
-          taskId: activeTask.id,
-          taskTitle: activeTask.title,
-          fromColumn: activeTask.column_id,
-          toColumn: overColumnId,
-          newStatus: newStatus,
-          targetColumn: targetColumn
-        });
-
-        // Update the moved task's column, position, and status
+        // Update the moved task's column and position
         const { error: moveError } = await supabase
           .from('tasks')
           .update({ 
             column_id: overColumnId,
             position: targetIndex,
-            status: newStatus,
             updated_at: new Date().toISOString()
           })
           .eq('id', activeTask.id);
@@ -1106,22 +961,13 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           const updatedTask = updatedTargetTasks.find(ut => ut.id === task.id);
           if (updatedTask) return updatedTask;
           
-          // If this is the moved task, update its column, position, and status
+          // If this is the moved task, update its column and position
           if (task.id === activeTask.id) {
-            return { 
-              ...task, 
-              column_id: overColumnId, 
-              position: targetIndex,
-              status: newStatus
-            };
+            return { ...task, column_id: overColumnId, position: targetIndex };
           }
           
           return task;
         }));
-        
-        console.log('✅ Cross-column task move completed successfully!');
-        console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
-        console.log('🔄 Real-time update will sync across all connected clients');
         
       } catch (err) {
         console.error('Failed to move task between columns:', err);
@@ -1182,38 +1028,12 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       
       // Update database for real data
       try {
-        // Find the target column details to update status
-        const targetColumn = columns.find(col => col.id === overTask.column_id);
-        const newStatus = targetColumn ? {
-          id: targetColumn.id,
-          name: targetColumn.name,
-          color: targetColumn.color,
-          order: targetColumn.position || 0,
-          isCompleted: targetColumn.name.toLowerCase().includes('done') || targetColumn.name.toLowerCase().includes('complete')
-        } : {
-          id: overTask.column_id,
-          name: overTask.column_id.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          color: '#6B7280',
-          order: 0,
-          isCompleted: false
-        };
-
-        console.log('🔄 Updating task status (cross-column):', {
-          taskId: activeTask.id,
-          taskTitle: activeTask.title,
-          fromColumn: activeTask.column_id,
-          toColumn: overTask.column_id,
-          newStatus: newStatus,
-          targetColumn: targetColumn
-        });
-
-        // Update the moved task's column, position, and status
+        // Update the moved task's column and position
         const { error: moveError } = await supabase
           .from('tasks')
           .update({ 
             column_id: overTask.column_id,
             position: targetIndex,
-            status: newStatus,
             updated_at: new Date().toISOString()
           })
           .eq('id', activeTask.id);
@@ -1242,22 +1062,13 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           const updatedTask = updatedTargetTasks.find(ut => ut.id === task.id);
           if (updatedTask) return updatedTask;
           
-          // If this is the moved task, update its column, position, and status
+          // If this is the moved task, update its column and position
           if (task.id === activeTask.id) {
-            return { 
-              ...task, 
-              column_id: overTask.column_id, 
-              position: targetIndex,
-              status: newStatus
-            };
+            return { ...task, column_id: overTask.column_id, position: targetIndex };
           }
           
           return task;
         }));
-        
-        console.log('✅ Cross-column task move completed successfully!');
-        console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
-        console.log('🔄 Real-time update will sync across all connected clients');
         
       } catch (err) {
         console.error('Failed to move task between columns:', err);
@@ -1416,9 +1227,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         throw error;
       }
       
-      console.log('✅ Task updated successfully in database');
-      console.log('🔄 Real-time update will sync across all connected clients');
-      
+      console.log('Task updated successfully in database');
       // Update local state
       setTasks(prev => prev.map(task => 
         task.id === taskId 
@@ -1497,27 +1306,17 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       
       console.log('Creating task with team_id:', effectiveTeamId);
       
-      // Find the target column details to set proper status
-      const targetColumn = columns.find(col => col.id === (newTask.column_id || "backlog"));
-      const initialStatus = targetColumn ? {
-        id: targetColumn.id,
-        name: targetColumn.name,
-        color: targetColumn.color,
-        order: targetColumn.position || 0,
-        isCompleted: targetColumn.name.toLowerCase().includes('done') || targetColumn.name.toLowerCase().includes('complete')
-      } : {
-        id: newTask.column_id || "backlog",
-        name: newTask.status || "Backlog",
-        color: "#6B7280",
-        order: 0,
-        isCompleted: false
-      };
-
       // Prepare task data for database
       const taskData = {
         title: newTask.title,
         description: newTask.description || null,
-        status: initialStatus,
+        status: {
+          id: "1",
+          name: newTask.status || "Backlog",
+          color: "#6B7280",
+          order: 0,
+          isCompleted: false
+        },
         priority: newTask.priority || 'medium',
         assignee_id: null, // TODO: Handle assignee mapping
         team_id: effectiveTeamId, // Use the effective team ID
@@ -1539,11 +1338,29 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       // Insert task into database
       console.log('Inserting task data:', taskData);
       
-      const { data, error } = await supabase
+      // First try with position field
+      let { data, error } = await supabase
         .from('tasks')
         .insert([taskData])
         .select()
         .single();
+
+      // If position column doesn't exist, try without it
+      if (error && (error.message.includes('position') || error.message.includes('column'))) {
+        console.log('Position column not found, creating task without position field');
+        
+        const taskDataWithoutPosition = { ...taskData };
+        delete taskDataWithoutPosition.position;
+        
+        const result = await supabase
+          .from('tasks')
+          .insert([taskDataWithoutPosition])
+          .select()
+          .single();
+        
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) {
         console.error('Error creating task:', {
@@ -1556,8 +1373,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         return;
       }
 
-      console.log('✅ Task created successfully:', data.title);
-      console.log('🔄 Real-time update will sync across all connected clients');
+      console.log('Task created successfully:', data);
 
       // Add the created task to local state
       setTasks(prev => [data, ...prev]);
@@ -1582,7 +1398,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
     }
   };
 
-  if (loading && showLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -1616,9 +1432,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
   return (
     <div className="flex-1 bg-gray-50">
-
       {/* Kanban Board */}
-        <DndContext
+      <DndContext
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -1646,16 +1461,6 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                     onAddTask={handleOpenTaskModal}
                     onTaskClick={handleTaskClick}
                     dropIndicator={dropIndicator}
-                    onEditColumn={(column) => {
-                      setSelectedColumn(column);
-                      setIsDeleteMode(false);
-                      setIsColumnEditModalOpen(true);
-                    }}
-                    onDeleteColumn={(column) => {
-                      setSelectedColumn(column);
-                      setIsDeleteMode(true);
-                      setIsColumnEditModalOpen(true);
-                    }}
                   />
                 ))}
             </SortableContext>
@@ -1686,29 +1491,6 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         columnId={selectedColumnId || undefined}
       />
 
-      {/* Section Creation Modal */}
-      <SectionCreationModal
-        isOpen={isSectionModalOpen}
-        onClose={() => setIsSectionModalOpen(false)}
-        teamId={teamId || user?.teamId || currentTeam?.id || ''}
-        onSectionCreated={refreshColumns}
-      />
-
-      {/* Column Edit Modal */}
-      <ColumnEditModal
-        isOpen={isColumnEditModalOpen}
-        onClose={() => {
-          setIsColumnEditModalOpen(false);
-          setSelectedColumn(null);
-          setIsDeleteMode(false);
-        }}
-        teamId={teamId || user?.teamId || currentTeam?.id || ''}
-        column={selectedColumn}
-        onColumnUpdated={refreshColumns}
-        onColumnDeleted={refreshColumns}
-        initialDeleteMode={isDeleteMode}
-      />
-
       {/* Task Detail Modal */}
       <TaskDetailModal
         isOpen={isTaskDetailModalOpen}
@@ -1721,6 +1503,15 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         onHandoff={handleHandoff}
         teams={teams}
         currentTeam={currentTeam}
+      />
+
+      {/* Section Creation Modal */}
+      <SectionCreationModal
+        isOpen={isSectionModalOpen}
+        onClose={() => setIsSectionModalOpen(false)}
+        onSectionCreated={refreshData}
+        teamId={currentTeam?.id || ''}
+        currentColumns={columns}
       />
     </div>
   );
@@ -1738,11 +1529,9 @@ interface SortableColumnProps {
     position: number;
     show: boolean;
   } | null;
-  onEditColumn: (column: any) => void;
-  onDeleteColumn: (column: any) => void;
 }
 
-function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator, onEditColumn, onDeleteColumn }: SortableColumnProps) {
+function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator }: SortableColumnProps) {
   const {
     attributes,
     listeners,
@@ -1781,8 +1570,6 @@ function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClic
         onTaskClick={onTaskClick}
         dropIndicator={dropIndicator}
         dragListeners={listeners}
-        onEditColumn={onEditColumn}
-        onDeleteColumn={onDeleteColumn}
       />
     </div>
   );
@@ -1801,22 +1588,19 @@ interface DroppableColumnProps {
     show: boolean;
   } | null;
   dragListeners?: any;
-  onEditColumn: (column: any) => void;
-  onDeleteColumn: (column: any) => void;
 }
 
-function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator, dragListeners, onEditColumn, onDeleteColumn }: DroppableColumnProps) {
+function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator, dragListeners }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
   });
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   return (
     <div className="flex-shrink-0 w-72 min-w-72 transition-all duration-200 ease-out">
       {/* Column Header */}
       <div 
-        className={`flex items-center justify-between mb-4 ${isDropdownOpen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
-        {...(isDropdownOpen ? {} : dragListeners)}
+        className="flex items-center justify-between mb-4 cursor-grab active:cursor-grabbing"
+        {...dragListeners}
       >
         <div className="flex items-center space-x-2">
           <div className="w-4 h-4 text-gray-400">
@@ -1837,47 +1621,9 @@ function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskCli
             {tasks.length}
           </Badge>
         </div>
-        <div 
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-        >
-          <DropdownMenu onOpenChange={setIsDropdownOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 w-6 p-0"
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onEditColumn(column);
-                }}
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Edit Column
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDeleteColumn(column);
-                }}
-                className="text-red-600 focus:text-red-600 hover:text-red-600"
-              >
-                <User className="w-4 h-4 mr-2" />
-                Delete Column
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+          <MoreHorizontal className="w-3 h-3" />
+        </Button>
       </div>
 
       {/* Column Tasks */}
@@ -1962,61 +1708,88 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
   // Track mouse movement to distinguish between click and drag
   const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null);
   const [hasMoved, setHasMoved] = useState(false);
-  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    console.log('Mouse down on task:', task.title);
     setMouseDownPos({ x: e.clientX, y: e.clientY });
     setHasMoved(false);
-    setIsMouseDown(true);
+    
+    // Clear any existing timeout
+    if (clickTimeout) {
+      clearTimeout(clickTimeout);
+    }
+    
+    // Set a timeout to detect if this is a click (not a drag)
+    const timeout = setTimeout(() => {
+      console.log('Click timeout triggered, hasMoved:', hasMoved);
+      if (!hasMoved) {
+        console.log('Opening modal for task:', task.title);
+        onTaskClick(task);
+      }
+    }, 150); // 150ms delay
+    
+    setClickTimeout(timeout);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (mouseDownPos && isMouseDown) {
+    if (mouseDownPos) {
       const distance = Math.sqrt(
         Math.pow(e.clientX - mouseDownPos.x, 2) + Math.pow(e.clientY - mouseDownPos.y, 2)
       );
-      if (distance > 3) { // 3px threshold for movement detection
+      if (distance > 5) { // 5px threshold for movement detection
+        console.log('Mouse moved, distance:', distance);
         setHasMoved(true);
+        // Clear the click timeout when movement is detected
+        if (clickTimeout) {
+          clearTimeout(clickTimeout);
+          setClickTimeout(null);
+        }
       }
     }
   };
 
-  const handleMouseUp = () => {
-    // If no movement was detected, treat as click
-    if (!hasMoved && isMouseDown) {
-      onTaskClick(task);
+  const handleDragStart = () => {
+    console.log('Drag started for task:', task.title);
+    setHasMoved(true);
+    // Clear the click timeout when drag starts
+    if (clickTimeout) {
+      clearTimeout(clickTimeout);
+      setClickTimeout(null);
     }
-    
+  };
+
+  const handleDragEnd = () => {
+    console.log('Drag ended for task:', task.title);
     // Reset states
     setHasMoved(false);
     setMouseDownPos(null);
-    setIsMouseDown(false);
   };
 
-  const handleMouseLeave = () => {
-    // Reset states when mouse leaves the card
-    setHasMoved(false);
-    setMouseDownPos(null);
-    setIsMouseDown(false);
-  };
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (clickTimeout) {
+        clearTimeout(clickTimeout);
+      }
+    };
+  }, [clickTimeout]);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`drag-item task-item bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all duration-200 ${
+      className={`drag-item task-item bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
         isDragging 
-          ? 'dragging opacity-60 shadow-2xl border-blue-300 bg-blue-50 scale-105 cursor-grabbing' 
-          : isMouseDown && hasMoved
-            ? 'cursor-grabbing'
-            : 'hover:shadow-md hover:scale-[1.02] cursor-pointer'
+          ? 'dragging opacity-60 shadow-2xl border-blue-300 bg-blue-50 scale-105' 
+          : 'hover:shadow-md hover:scale-[1.02]'
       }`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
       {...attributes}
       {...listeners}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       {/* Task Content */}
       <div className="flex items-start space-x-3">
@@ -2053,7 +1826,7 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
                   <span>{task.progress}</span>
                 </div>
               )}
-          
+              
               {/* Due Date */}
               {task.due_date && (
                 <div className="flex items-center space-x-1 text-xs text-gray-500">

@@ -177,4 +177,18 @@
     background-color: #eff6ff;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
   }
+
+  /* Conveyor belt animation for package tracker */
+  @keyframes conveyor-belt {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 80px 80px;
+    }
+  }
+  
+  .animate-conveyor-belt {
+    animation: conveyor-belt 2s linear infinite;
+  }
 }
