@@ -425,14 +425,33 @@ function SortableTaskItem({ task, priorityColor }: SortableTaskItemProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+      className={`bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all ${
         isDragging ? 'opacity-50 shadow-lg' : ''
       }`}
-      {...attributes}
-      {...listeners}
     >
       {/* Task Content - Todoist Style */}
       <div className="flex items-start space-x-3">
+        {/* Drag Handle */}
+        <div 
+          className="flex-shrink-0 mt-0.5 cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <div className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <circle cx="2" cy="2" r="1"/>
+              <circle cx="6" cy="2" r="1"/>
+              <circle cx="10" cy="2" r="1"/>
+              <circle cx="2" cy="6" r="1"/>
+              <circle cx="6" cy="6" r="1"/>
+              <circle cx="10" cy="6" r="1"/>
+              <circle cx="2" cy="10" r="1"/>
+              <circle cx="6" cy="10" r="1"/>
+              <circle cx="10" cy="10" r="1"/>
+            </svg>
+          </div>
+        </div>
+        
         {/* Checkbox */}
         <div 
           className="flex-shrink-0 mt-0.5"

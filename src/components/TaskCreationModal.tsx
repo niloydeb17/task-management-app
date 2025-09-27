@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,16 +43,14 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
 
   const handleCreateTask = () => {
     const newTask = {
-      id: `task-${Date.now()}`,
       title: taskName,
       description: addDescription ? description : undefined,
       status,
       assignee,
       dueDate,
-      priority,
+      priority: priority || 'medium',
       tags,
       column_id: "pre-sprint", // Default to first column
-      created_at: new Date().toISOString()
     };
     
     onTaskCreate(newTask);
@@ -84,7 +83,10 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-[98vw] sm:w-[95vw] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-h-[90vh] p-0">
+      <DialogContent className="!max-w-fit w-[98vw] sm:w-[95vw] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-h-[90vh] p-0 overflow-auto">
+        <VisuallyHidden>
+          <DialogTitle>Create New Task</DialogTitle>
+        </VisuallyHidden>
         <div className="p-4 sm:p-6 lg:p-8">
           <div className="flex items-start justify-between mb-6 sm:mb-8">
             <Tabs defaultValue="task" className="w-full">
@@ -131,7 +133,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
                 <div className="space-y-10">
                   {/* Task Name Input */}
                   <div className="space-y-6">
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       <label className="text-sm font-medium text-gray-700">Task Name</label>
                       <Input
                         placeholder="Enter task name..."
@@ -145,7 +147,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
                       <Checkbox
                         id="add-description"
                         checked={addDescription}
-                        onCheckedChange={setAddDescription}
+                        onCheckedChange={(checked) => setAddDescription(checked === true)}
                         className="border-gray-300"
                       />
                       <label htmlFor="add-description" className="text-sm text-gray-600 cursor-pointer">
@@ -320,31 +322,6 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
                     </Button>
                   </div>
 
-                  {/* Templates */}
-                  <div className="space-y-6">
-                    <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
-                      <Rocket className="w-4 h-4" />
-                      <span>Templates</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Button variant="outline" size="sm" className="h-12 justify-start border-gray-300 hover:bg-gray-50 text-sm">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-3" />
-                        Design Task
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-12 justify-start border-gray-300 hover:bg-gray-50 text-sm">
-                        <div className="w-3 h-3 bg-green-500 rounded-full mr-3" />
-                        Development Task
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-12 justify-start border-gray-300 hover:bg-gray-50 text-sm">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full mr-3" />
-                        Content Task
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-12 justify-start border-gray-300 hover:bg-gray-50 text-sm">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full mr-3" />
-                        Marketing Task
-                      </Button>
-                    </div>
-                  </div>
                 </div>
               </TabsContent>
             </Tabs>
@@ -352,9 +329,6 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
             <div className="flex items-center space-x-2 flex-shrink-0">
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-gray-100">
                 <Maximize2 className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-gray-100" onClick={onClose}>
-                <X className="w-4 h-4" />
               </Button>
             </div>
           </div>
