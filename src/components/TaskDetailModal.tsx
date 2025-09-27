@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { TaskHandoffModal } from "./TaskHandoffModal";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,8 @@ import {
   MessageCircle,
   CheckCircle2,
   Home,
-  RefreshCw
+  RefreshCw,
+  ArrowRight
 } from "lucide-react";
 
 interface Task {
@@ -49,9 +51,12 @@ interface TaskDetailModalProps {
   onClose: () => void;
   task: Task | null;
   onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
+  onHandoff?: (taskId: string, handoffData: any) => Promise<void>;
+  teams?: Array<{ id: string; name: string; type: string; color: string }>;
+  currentTeam?: { id: string; name: string; type: string; color: string };
 }
 
-export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate }: TaskDetailModalProps) {
+export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff, teams, currentTeam }: TaskDetailModalProps) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [comment, setComment] = useState("");
   const [subTasks, setSubTasks] = useState<string[]>([]);
@@ -65,6 +70,9 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate }: TaskDet
   // Inline editing state
   const [editingField, setEditingField] = useState<string | null>(null);
   const [tempValue, setTempValue] = useState<string>("");
+  
+  // Handoff modal state
+  const [isHandoffModalOpen, setIsHandoffModalOpen] = useState(false);
 
   // Initialize edited task when modal opens
   useEffect(() => {
@@ -239,6 +247,17 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate }: TaskDet
                     >
                       Edit
                     </Button>
+                    {onHandoff && teams && currentTeam && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setIsHandoffModalOpen(true)}
+                        className="h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      >
+                        <ArrowRight className="w-4 h-4 mr-1" />
+                        Handoff
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
@@ -566,6 +585,36 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate }: TaskDet
             </div>
           </div>
         </div>
+        
+        {/* Handoff Modal */}
+        {onHandoff && teams && currentTeam && (
+          <TaskHandoffModal
+            task={{
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              status: { id: task.column_id, name: 'Complete', color: '#10B981', order: 3, isCompleted: true },
+              priority: task.priority,
+              assigneeId: task.assignee?.name,
+              teamId: currentTeam.id,
+              columnId: task.column_id,
+              tags: task.tags,
+              attachments: [],
+              comments: [],
+              handoffHistory: [],
+              handoffStatus: 'none',
+              handoffRequirements: [],
+              createdAt: new Date(task.created_at),
+              updatedAt: new Date(task.created_at),
+              dueDate: task.due_date ? new Date(task.due_date) : undefined
+            }}
+            teams={teams}
+            currentTeam={currentTeam}
+            onHandoff={onHandoff}
+            isOpen={isHandoffModalOpen}
+            onOpenChange={setIsHandoffModalOpen}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

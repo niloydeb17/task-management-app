@@ -50,6 +50,11 @@ export interface Task {
   attachments: Attachment[];
   comments: Comment[];
   handoffHistory: Handoff[];
+  handoffStatus: 'none' | 'pending_handoff' | 'handed_off' | 'accepted' | 'rejected';
+  sourceTeamId?: string;
+  handoffNotes?: string;
+  handoffRequirements: string[];
+  handoffAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   dueDate?: Date;
@@ -85,11 +90,13 @@ export interface Comment {
 
 export interface Handoff {
   id: string;
+  taskId: string;
   fromTeamId: string;
   toTeamId: string;
-  taskId: string;
   handoffData: HandoffData;
   status: 'pending' | 'accepted' | 'rejected';
+  handoffNotes?: string;
+  requirements: string[];
   createdAt: Date;
   acceptedAt?: Date;
   rejectedAt?: Date;
@@ -174,4 +181,5 @@ export interface HandoffForm {
   notes: string;
   requirements: string[];
   files: File[];
+  handoffData?: Record<string, any>;
 }

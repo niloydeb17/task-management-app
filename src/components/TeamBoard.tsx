@@ -12,7 +12,9 @@ import {
   User, 
   Flag,
   MessageSquare,
-  Paperclip
+  Paperclip,
+  ArrowRight,
+  Clock
 } from "lucide-react";
 import { Task, Column } from "@/types";
 
@@ -37,6 +39,14 @@ export function TeamBoard({
 
   const getTasksForColumn = (columnId: string) => {
     return tasks.filter(task => task.columnId === columnId);
+  };
+
+  const isBacklogColumn = (column: Column) => {
+    return column.id === 'backlog' || column.name.toLowerCase() === 'backlog';
+  };
+
+  const isHandoffTask = (task: Task) => {
+    return task.handoffStatus === 'handed_off' || task.handoffStatus === 'accepted' || task.sourceTeamId;
   };
 
   const getPriorityColor = (priority: Task['priority']) => {
@@ -101,14 +111,28 @@ export function TeamBoard({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {columns.map((column) => {
           const columnTasks = getTasksForColumn(column.id);
+          const isBacklog = isBacklogColumn(column);
           
           return (
             <div key={column.id} className="space-y-4">
               {/* Column Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <h3 className="font-semibold text-gray-900">{column.name}</h3>
-                  <Badge variant="secondary">{columnTasks.length}</Badge>
+                  <h3 className={`font-semibold ${isBacklog ? 'text-blue-700' : 'text-gray-900'}`}>
+                    {column.name}
+                  </h3>
+                  <Badge 
+                    variant={isBacklog ? "default" : "secondary"}
+                    className={isBacklog ? "bg-blue-100 text-blue-800" : ""}
+                  >
+                    {columnTasks.length}
+                  </Badge>
+                  {isBacklog && (
+                    <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
+                      <ArrowRight className="w-3 h-3 mr-1" />
+                      Handoffs
+                    </Badge>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm">
                   <MoreHorizontal className="w-4 h-4" />
@@ -117,31 +141,54 @@ export function TeamBoard({
 
               {/* Column Tasks */}
               <div
-                className="space-y-3 min-h-[400px] p-2 rounded-lg border-2 border-dashed border-gray-200 hover:border-gray-300 transition-colors"
+                className={`space-y-3 min-h-[400px] p-2 rounded-lg border-2 border-dashed transition-colors ${
+                  isBacklog 
+                    ? 'border-blue-200 hover:border-blue-300 bg-blue-50/30' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, column.id)}
               >
-                {columnTasks.map((task) => (
-                  <Card
-                    key={task.id}
-                    className="cursor-move hover:shadow-md transition-shadow"
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-sm font-medium line-clamp-2">
-                          {task.title}
-                        </CardTitle>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs ${getPriorityColor(task.priority)}`}
-                        >
-                          <Flag className="w-3 h-3 mr-1" />
-                          {task.priority}
-                        </Badge>
-                      </div>
-                    </CardHeader>
+                {columnTasks.map((task) => {
+                  const isHandoff = isHandoffTask(task);
+                  
+                  return (
+                    <Card
+                      key={task.id}
+                      className={`cursor-move hover:shadow-md transition-shadow ${
+                        isHandoff ? 'border-l-4 border-l-blue-500 bg-blue-50/50' : ''
+                      }`}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, task.id)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-sm font-medium line-clamp-2">
+                            {task.title}
+                          </CardTitle>
+                          <div className="flex flex-col items-end space-y-1">
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${getPriorityColor(task.priority)}`}
+                            >
+                              <Flag className="w-3 h-3 mr-1" />
+                              {task.priority}
+                            </Badge>
+                            {isHandoff && (
+                              <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
+                                <ArrowRight className="w-3 h-3 mr-1" />
+                                Handoff
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {isHandoff && task.sourceTeamId && (
+                          <div className="flex items-center space-x-1 text-xs text-blue-600 mt-1">
+                            <Clock className="w-3 h-3" />
+                            <span>From: {task.sourceTeamId}</span>
+                          </div>
+                        )}
+                      </CardHeader>
                     <CardContent className="pt-0">
                       {task.description && (
                         <p className="text-xs text-gray-600 mb-3 line-clamp-2">
@@ -208,16 +255,30 @@ export function TeamBoard({
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
 
                 {/* Empty State */}
                 {columnTasks.length === 0 && (
                   <div className="flex items-center justify-center h-32 text-gray-400">
                     <div className="text-center">
-                      <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-gray-100 flex items-center justify-center">
-                        <Plus className="w-4 h-4" />
+                      <div className={`w-8 h-8 mx-auto mb-2 rounded-full flex items-center justify-center ${
+                        isBacklog ? 'bg-blue-100' : 'bg-gray-100'
+                      }`}>
+                        {isBacklog ? (
+                          <ArrowRight className="w-4 h-4 text-blue-500" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
                       </div>
-                      <p className="text-sm">Drop tasks here</p>
+                      <p className="text-sm">
+                        {isBacklog ? 'No handoffs yet' : 'Drop tasks here'}
+                      </p>
+                      {isBacklog && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Tasks handed off from other teams will appear here
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

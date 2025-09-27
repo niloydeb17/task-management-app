@@ -20,6 +20,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import { TaskCreationModal } from "@/components/TaskCreationModal";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { HandoffService } from "@/lib/handoff";
+import { HandoffForm } from "@/types";
 
 interface Task {
   id: string;
@@ -60,6 +62,8 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [teams, setTeams] = useState<Array<{ id: string; name: string; type: string; color: string }>>([]);
+  const [currentTeam, setCurrentTeam] = useState<{ id: string; name: string; type: string; color: string } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     columnId: string;
     position: number;
@@ -92,26 +96,69 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
           throw new Error(`Team error: ${teamError.message}`);
         }
         
+        // Fetch all teams for handoff functionality
+        const { data: allTeamsData, error: allTeamsError } = await supabase
+          .from('teams')
+          .select('id, name, type, color');
+        
+        if (allTeamsError) {
+          console.error('All teams error:', allTeamsError);
+        } else {
+          setTeams(allTeamsData || []);
+        }
+        
         let teamData;
         let columnsData;
         let tasksData = [];
         
-        if (!teamsData || teamsData.length === 0) {
-          // Use dummy data when no teams found
-          console.log('No teams found, using dummy data');
+        // Use dummy data for testing teams or when no teams found
+        const isTestTeam = teamId && ['dummy-team-id', 'dummy-dev-team', 'dummy-content-team', 'dummy-marketing-team'].includes(teamId);
+        
+        if (!teamsData || teamsData.length === 0 || isTestTeam) {
+          // Use dummy data when no teams found or for test teams
+          console.log('Using dummy data for team:', teamId);
+          
+          // Set dummy teams data for handoff functionality
+          setTeams([
+            { id: 'dummy-team-id', name: 'Design Sprint', type: 'design', color: '#3B82F6' },
+            { id: 'dummy-dev-team', name: 'Development Team', type: 'development', color: '#10B981' },
+            { id: 'dummy-content-team', name: 'Content Team', type: 'content', color: '#F59E0B' },
+            { id: 'dummy-marketing-team', name: 'Marketing Team', type: 'marketing', color: '#EF4444' }
+          ]);
           
           // Dummy team data
-          teamData = {
-            id: 'dummy-team-id',
-            name: 'Design Sprint',
-            board_template: {
-              columns: [
-                { id: 'pre-sprint', name: 'Pre-sprint prep', color: '#6B7280', order: 0 },
-                { id: 'day-by-day', name: 'Day-by-day prep', color: '#3B82F6', order: 1 },
-                { id: 'post-sprint', name: 'Post-sprint prep', color: '#10B981', order: 2 }
-              ]
-            }
-          };
+          if (teamId === 'dummy-dev-team') {
+            teamData = {
+              id: 'dummy-dev-team',
+              name: 'Development Team',
+              type: 'development',
+              color: '#10B981',
+              board_template: {
+                columns: [
+                  { id: 'backlog', name: 'Backlog', color: '#6B7280', order: 0 },
+                  { id: 'todo', name: 'To Do', color: '#3B82F6', order: 1 },
+                  { id: 'in-progress', name: 'In Progress', color: '#F59E0B', order: 2 },
+                  { id: 'review', name: 'Review', color: '#8B5CF6', order: 3 },
+                  { id: 'done', name: 'Done', color: '#10B981', order: 4 }
+                ]
+              }
+            };
+          } else {
+            teamData = {
+              id: 'dummy-team-id',
+              name: 'Design Sprint',
+              type: 'design',
+              color: '#3B82F6',
+              board_template: {
+                columns: [
+                  { id: 'backlog', name: 'Backlog', color: '#6B7280', order: 0 },
+                  { id: 'pre-sprint', name: 'Pre-sprint prep', color: '#6B7280', order: 1 },
+                  { id: 'day-by-day', name: 'Day-by-day prep', color: '#3B82F6', order: 2 },
+                  { id: 'post-sprint', name: 'Post-sprint prep', color: '#10B981', order: 3 }
+                ]
+              }
+            };
+          }
           
           // Dummy tasks data
           tasksData = [
@@ -158,7 +205,7 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
             {
               id: 'task-4',
               title: 'Select Dates and Duration',
-              description: 'Determine the dates and dura...',
+              description: 'Determine the dates and duration for the sprint',
               priority: 'medium' as const,
               column_id: 'pre-sprint',
               tags: ['Sprint'],
@@ -170,8 +217,21 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
             },
             {
               id: 'task-5',
+              title: 'Design System Complete',
+              description: 'Finished creating the complete design system with components, colors, and typography guidelines. Ready for development team to implement.',
+              priority: 'high' as const,
+              column_id: 'post-sprint',
+              tags: ['Design', 'Complete'],
+              due_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // Past due date
+              created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+              team_id: 'dummy-team-id',
+              position: 0,
+              assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' }
+            },
+            {
+              id: 'task-6',
               title: 'Secure Resources',
-              description: 'Arrange necessary resources ...',
+              description: 'Arrange necessary resources for the sprint',
               priority: 'medium' as const,
               column_id: 'pre-sprint',
               tags: ['Sprint'],
@@ -313,8 +373,63 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
               assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' }
             }
           ];
+          
+          // Add handed-off tasks for any team that's not the Design team
+          console.log('Current teamId:', teamId);
+          if (teamId !== 'dummy-team-id') {
+            console.log('Loading team with handed-off tasks for teamId:', teamId);
+            
+            // Add the handed-off task to the backlog
+            tasksData.push({
+              id: 'handoff-task-1',
+              title: 'Design System Complete',
+              description: 'Finished creating the complete design system with components, colors, and typography guidelines. Ready for development team to implement.',
+              priority: 'high' as const,
+              column_id: 'backlog',
+              tags: ['Design', 'Complete', 'Handoff'],
+              due_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+              created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+              team_id: teamId,
+              position: 0,
+              assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' },
+              handoff_status: 'handed_off',
+              source_team_id: 'dummy-team-id'
+            });
+            
+            // Add some additional tasks for non-Design teams
+            if (teamId === 'dummy-dev-team') {
+              tasksData.push(
+                {
+                  id: 'dev-task-1',
+                  title: 'Set up Development Environment',
+                  description: 'Configure development tools and environment for the project',
+                  priority: 'high' as const,
+                  column_id: 'todo',
+                  tags: ['Setup', 'Development'],
+                  due_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+                  created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+                  team_id: teamId,
+                  position: 0,
+                  assignee: { name: 'Alex', avatar: '/placeholder-avatar.jpg' }
+                },
+                {
+                  id: 'dev-task-2',
+                  title: 'Implement User Authentication',
+                  description: 'Build user login and registration functionality',
+                  priority: 'medium' as const,
+                  column_id: 'in-progress',
+                  tags: ['Backend', 'Auth'],
+                  due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+                  created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+                  team_id: teamId,
+                  position: 0,
+                  assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' }
+                }
+              );
+            }
+          }
         } else {
-          console.log('Using real team data from database');
+          console.log('Using real team data from database for team:', teamId);
           teamData = teamsData[0];
           
           // Extract columns from board template
@@ -326,7 +441,7 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
           // Get tasks from database
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
-            .select('id, title, description, priority, column_id, tags, due_date, created_at, position, team_id')
+            .select('id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at')
             .eq('team_id', teamData.id)
             .order('position', { ascending: true });
           
@@ -359,8 +474,17 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
           position: col.order || index
         }));
         
+        // Set current team for handoff functionality
+        setCurrentTeam({
+          id: teamData.id,
+          name: teamData.name,
+          type: teamData.type || 'other',
+          color: teamData.color || '#3B82F6'
+        });
+        
         console.log('Columns data:', columnsData);
         console.log('Tasks data:', tasksData);
+        console.log('Number of tasks:', tasksData.length);
         
         setColumns(columnsData);
         setTasks(tasksData);
@@ -997,6 +1121,55 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
     }
   };
 
+  const handleHandoff = async (taskId: string, handoffData: HandoffForm) => {
+    try {
+      console.log('TodoistKanban - handleHandoff called with:', { taskId, handoffData });
+      console.log('TodoistKanban - handoffData type:', typeof handoffData);
+      console.log('TodoistKanban - handoffData keys:', Object.keys(handoffData || {}));
+      
+      if (!handoffData || !handoffData.toTeamId) {
+        console.error('Invalid handoff data:', handoffData);
+        return;
+      }
+      
+      const result = await HandoffService.handoffTask(taskId, handoffData);
+      
+      if (result.success) {
+        console.log('Task handed off successfully');
+        
+        // For dummy data, simulate the handoff by removing the task from current board
+        const isDummyData = taskId.startsWith('task-');
+        if (isDummyData) {
+          console.log('Removing handed off task from current board');
+          setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+          
+          // Show success message
+          const targetTeamName = teams.find(t => t.id === handoffData.toTeamId)?.name || 'target team';
+          alert(`Task handed off to ${targetTeamName} successfully!`);
+        } else {
+          // For real data, remove the task from current view since it moved to another team
+          const targetTeamName = teams.find(t => t.id === handoffData.toTeamId)?.name || 'target team';
+          
+          // Ask user if they want to navigate to the target team's board
+          const shouldNavigate = confirm(`Task handed off to ${targetTeamName} successfully!\n\nWould you like to view the ${targetTeamName} board?\n\n(You can also go to /teams to see all teams)`);
+          
+          if (shouldNavigate) {
+            // Navigate to the target team's board
+            window.location.href = `/team/${handoffData.toTeamId}`;
+          }
+          
+          // Remove the task from current view since it moved to another team
+          setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+        }
+      } else {
+        console.error('Handoff failed:', result.error);
+        // You could show a toast notification here
+      }
+    } catch (error) {
+      console.error('Error handing off task:', error);
+    }
+  };
+
   const handleTaskCreate = async (newTask: any) => {
     try {
       // Prepare task data for database
@@ -1012,13 +1185,18 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
         },
         priority: newTask.priority || 'medium',
         assignee_id: null, // TODO: Handle assignee mapping
-        team_id: "56871b37-7999-44d7-b1f2-38e1acca86ad", // Design Team ID
+        team_id: teamId, // Use the actual team ID passed to the component
         column_id: newTask.column_id || "backlog",
         position: newTask.position || 0, // Try to include position field
         tags: newTask.tags || [],
         attachments: [],
         comments: [],
         handoff_history: [],
+        handoff_status: 'none',
+        source_team_id: null,
+        handoff_notes: null,
+        handoff_requirements: [],
+        handoff_at: null,
         due_date: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null,
         completed_at: null
       };
@@ -1209,7 +1387,18 @@ export function TodoistKanban({ teamId }: TodoistKanbanProps) {
         }}
         task={selectedTask}
         onTaskUpdate={handleTaskUpdate}
+        onHandoff={handleHandoff}
+        teams={teams}
+        currentTeam={currentTeam}
       />
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 text-xs rounded">
+          <div>Teams: {teams.length}</div>
+          <div>Current Team: {currentTeam?.name || 'None'}</div>
+        </div>
+      )}
     </div>
   );
 }

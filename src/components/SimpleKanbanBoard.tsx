@@ -148,7 +148,7 @@ export function SimpleKanbanBoard() {
           // Get tasks from database
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
-            .select('id, title, description, priority, column_id, tags, due_date, created_at')
+            .select('id, title, description, priority, column_id, tags, due_date, created_at, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at')
             .eq('team_id', teamData.id)
             .order('created_at', { ascending: false });
           
