@@ -404,8 +404,8 @@ export function TodoistKanban() {
         },
         priority: newTask.priority || 'medium',
         assignee_id: null, // TODO: Handle assignee mapping
-        team_id: "team-1", // TODO: Get from user context
-        column_id: newTask.column_id || "pre-sprint",
+        team_id: "56871b37-7999-44d7-b1f2-38e1acca86ad", // Design Team ID
+        column_id: newTask.column_id || "backlog",
         tags: newTask.tags || [],
         attachments: [],
         comments: [],
@@ -415,6 +415,8 @@ export function TodoistKanban() {
       };
 
       // Insert task into database
+      console.log('Inserting task data:', taskData);
+      
       const { data, error } = await supabase
         .from('tasks')
         .insert([taskData])
@@ -422,9 +424,17 @@ export function TodoistKanban() {
         .single();
 
       if (error) {
-        console.error('Error creating task:', error);
+        console.error('Error creating task:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        alert(`Failed to create task: ${error.message}`);
         return;
       }
+
+      console.log('Task created successfully:', data);
 
       // Add the created task to local state
       setTasks(prev => [data, ...prev]);

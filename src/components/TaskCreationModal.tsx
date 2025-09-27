@@ -50,7 +50,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
       dueDate,
       priority: priority || 'medium',
       tags,
-      column_id: "pre-sprint", // Default to first column
+      column_id: "backlog", // Default to backlog column
     };
     
     onTaskCreate(newTask);
