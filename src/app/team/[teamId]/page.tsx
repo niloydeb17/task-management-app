@@ -1,11 +1,17 @@
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
 
-export default function Dashboard() {
+interface TeamPageProps {
+  params: {
+    teamId: string;
+  };
+}
+
+export default function TeamPage({ params }: TeamPageProps) {
   const user = {
     name: "Sam",
     email: "sam@example.com",
-    teamId: undefined,
+    teamId: params.teamId,
     role: "Designer"
   };
 
@@ -18,7 +24,7 @@ export default function Dashboard() {
       
       {/* Main Content - Takes remaining space */}
       <div className="flex-1 overflow-x-auto transition-all duration-150">
-        <TodoistKanban />
+        <TodoistKanban teamId={params.teamId} />
       </div>
     </div>
   );

@@ -29,9 +29,10 @@ interface TaskCreationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTaskCreate: (task: any) => void;
+  columnId?: string;
 }
 
-export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreationModalProps) {
+export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: TaskCreationModalProps) {
   const [taskName, setTaskName] = useState("");
   const [addDescription, setAddDescription] = useState(false);
   const [description, setDescription] = useState("");
@@ -50,7 +51,8 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate }: TaskCreatio
       dueDate,
       priority: priority || 'medium',
       tags,
-      column_id: "backlog", // Default to backlog column
+      column_id: columnId || "backlog", // Use provided column_id or default to backlog
+      position: 0, // New tasks are added to the top
     };
     
     onTaskCreate(newTask);

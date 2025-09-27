@@ -1,0 +1,186 @@
+"use client";
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export interface Team {
+  id: string;
+  name: string;
+  type: 'design' | 'content' | 'development' | 'marketing' | 'other';
+  color: string;
+  board_template: {
+    columns: Array<{
+      id: string;
+      name: string;
+      color: string;
+      order: number;
+    }>;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTeamData {
+  name: string;
+  type: 'design' | 'content' | 'development' | 'marketing' | 'other';
+  color?: string;
+}
+
+const defaultBoardTemplate = {
+  columns: [
+    { id: 'backlog', name: 'Backlog', color: '#6B7280', order: 0 },
+    { id: 'todo', name: 'To Do', color: '#3B82F6', order: 1 },
+    { id: 'in_progress', name: 'In Progress', color: '#F59E0B', order: 2 },
+    { id: 'handover', name: 'Handover', color: '#8B5CF6', order: 3 },
+    { id: 'done', name: 'Done', color: '#10B981', order: 4 }
+  ]
+};
+
+const teamTypeColors = {
+  design: '#8B5CF6',
+  content: '#F59E0B', 
+  development: '#3B82F6',
+  marketing: '#EF4444',
+  other: '#6B7280'
+};
+
+export function useTeams() {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch teams from database
+  const fetchTeams = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('teams')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (fetchError) {
+        console.error('Error fetching teams:', fetchError);
+        throw new Error(`Failed to fetch teams: ${fetchError.message}`);
+      }
+
+      setTeams(data || []);
+    } catch (err) {
+      console.error('Fetch teams error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create a new team
+  const createTeam = async (teamData: CreateTeamData): Promise<Team | null> => {
+    try {
+      setError(null);
+
+      const newTeam = {
+        name: teamData.name,
+        type: teamData.type,
+        color: teamData.color || teamTypeColors[teamData.type],
+        board_template: defaultBoardTemplate,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error: insertError } = await supabase
+        .from('teams')
+        .insert([newTeam])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Error creating team:', insertError);
+        throw new Error(`Failed to create team: ${insertError.message}`);
+      }
+
+      // Add to local state
+      setTeams(prev => [data, ...prev]);
+      
+      return data;
+    } catch (err) {
+      console.error('Create team error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return null;
+    }
+  };
+
+  // Update a team
+  const updateTeam = async (teamId: string, updates: Partial<CreateTeamData>): Promise<Team | null> => {
+    try {
+      setError(null);
+
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error: updateError } = await supabase
+        .from('teams')
+        .update(updateData)
+        .eq('id', teamId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating team:', updateError);
+        throw new Error(`Failed to update team: ${updateError.message}`);
+      }
+
+      // Update local state
+      setTeams(prev => prev.map(team => team.id === teamId ? data : team));
+      
+      return data;
+    } catch (err) {
+      console.error('Update team error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return null;
+    }
+  };
+
+  // Delete a team
+  const deleteTeam = async (teamId: string): Promise<boolean> => {
+    try {
+      setError(null);
+
+      const { error: deleteError } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', teamId);
+
+      if (deleteError) {
+        console.error('Error deleting team:', deleteError);
+        throw new Error(`Failed to delete team: ${deleteError.message}`);
+      }
+
+      // Remove from local state
+      setTeams(prev => prev.filter(team => team.id !== teamId));
+      
+      return true;
+    } catch (err) {
+      console.error('Delete team error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    }
+  };
+
+  // Load teams on mount
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  return {
+    teams,
+    loading,
+    error,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+    refetch: fetchTeams
+  };
+}
