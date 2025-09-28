@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Users, Search, Upload, Folder, Briefcase, Building, Target, 
-  BarChart3, Lightbulb, Rocket, Wrench, Code, PenTool, FileText, 
+  BarChart3, Lightbulb, Rocket, Wrench, Code, FileText, 
   TrendingUp, Heart, Star, Shield, Zap, Globe, Mail, Phone, 
-  Calendar, Clock, Settings, User, UserPlus, Crown, Award, 
+  Calendar, Clock, Settings, User, Crown, Award, 
   Gift, Coffee, Home, Car, Plane, Camera, Music, Video, 
   Book, File, Download, Share, Link, Plus, Minus, Check, 
   X, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Edit, Trash, 
@@ -44,7 +44,6 @@ const teamTypes = [
 const spaceIcons = [
   { value: 'Folder', label: 'Folder', icon: Folder },
   { value: 'Users', label: 'Team', icon: Users },
-  { value: 'PenTool', label: 'Design', icon: PenTool },
   { value: 'Code', label: 'Development', icon: Code },
   { value: 'FileText', label: 'Content', icon: FileText },
   { value: 'TrendingUp', label: 'Marketing', icon: TrendingUp },
@@ -66,7 +65,6 @@ const spaceIcons = [
   { value: 'Clock', label: 'Time', icon: Clock },
   { value: 'Settings', label: 'Settings', icon: Settings },
   { value: 'User', label: 'User', icon: User },
-  { value: 'UserPlus', label: 'Add User', icon: UserPlus },
   { value: 'Crown', label: 'Premium', icon: Crown },
   { value: 'Award', label: 'Award', icon: Award },
   { value: 'Gift', label: 'Gift', icon: Gift },
