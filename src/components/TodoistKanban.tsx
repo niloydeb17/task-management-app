@@ -728,6 +728,18 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
     const pollInterval = setInterval(async () => {
       try {
+        console.log('🔄 Polling for tasks...', { 
+          teamId: currentTeam.id,
+          supabaseInitialized: !!supabase,
+          supabaseUrl: supabase?.supabaseUrl || 'Not set',
+          supabaseKey: supabase?.supabaseKey ? 'Present' : 'Missing'
+        });
+        
+        if (!supabase) {
+          console.error('❌ Supabase client not initialized');
+          return;
+        }
+        
         const { data: latestTasks, error } = await supabase
           .from('tasks')
           .select(`
@@ -740,15 +752,22 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           .order('updated_at', { ascending: false });
 
         if (error) {
-          console.error('Polling error:', {
-            error,
-            errorMessage: error.message,
-            errorCode: error.code,
-            errorDetails: error.details,
+          console.error('❌ Polling error:', {
+            error: error || 'No error object',
+            errorMessage: error?.message || 'No error message',
+            errorCode: error?.code || 'No error code',
+            errorDetails: error?.details || 'No error details',
+            errorHints: error?.hints || 'No error hints',
             teamId: currentTeam.id,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            supabaseUrl: supabase.supabaseUrl,
+            supabaseKey: supabase.supabaseKey ? 'Present' : 'Missing'
           });
-          // Don't return early, just log the error and continue
+          return;
+        }
+
+        if (!latestTasks) {
+          console.warn('⚠️ Polling returned null data:', { teamId: currentTeam.id });
           return;
         }
 
@@ -785,7 +804,15 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           });
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error('❌ Polling catch error:', {
+          error: err,
+          errorMessage: err instanceof Error ? err.message : 'Unknown error',
+          errorStack: err instanceof Error ? err.stack : 'No stack trace',
+          teamId: currentTeam.id,
+          timestamp: new Date().toISOString(),
+          errorType: typeof err,
+          errorStringified: JSON.stringify(err, null, 2)
+        });
       }
     }, 2000); // Poll every 2 seconds
 
