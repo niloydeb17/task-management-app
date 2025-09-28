@@ -95,9 +95,61 @@ function TeamPageContent({ params }: TeamPageProps) {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      console.log('Attempting to sign out...');
+      
+      // Try BetterAuth signOut with timeout
+      const signOutPromise = signOut();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('SignOut timeout')), 3000)
+      );
+      
+      await Promise.race([signOutPromise, timeoutPromise]);
+      console.log('Sign out successful');
+      
+      // Redirect after successful sign out
+      window.location.href = '/';
+      
     } catch (error) {
       console.error('Sign out error:', error);
+      
+      // Fallback: Clear all authentication data and redirect
+      try {
+        console.log('Using fallback sign out method...');
+        
+        // Clear local storage
+        if (typeof localStorage !== 'undefined') {
+          localStorage.clear();
+        }
+        
+        // Clear session storage
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.clear();
+        }
+        
+        // Clear cookies
+        if (typeof document !== 'undefined') {
+          document.cookie.split(";").forEach((c) => {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(/=.*/, "=;expires=" + new Date().toISOString() + ";path=/");
+          });
+        }
+        
+        console.log('Fallback cleanup complete, redirecting...');
+        
+        // Force redirect
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+        
+      } catch (fallbackError) {
+        console.error('Fallback sign out error:', fallbackError);
+        
+        // Last resort: force redirect
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
     }
   };
 

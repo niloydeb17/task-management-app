@@ -105,18 +105,22 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         setLoading(true);
         setError(null);
         
-        // Get team data
-        let teamsQuery = supabase
-          .from('teams')
-          .select('id, name, board_template');
+        // Parallel database queries for better performance
+        const [teamsResult, allTeamsResult] = await Promise.allSettled([
+          // Get team data
+          teamId 
+            ? supabase.from('teams').select('id, name, board_template').eq('id', teamId)
+            : supabase.from('teams').select('id, name, board_template').limit(1),
+          
+          // Fetch all teams for handoff functionality
+          supabase.from('teams').select('id, name, type, color')
+        ]);
         
-        if (teamId) {
-          teamsQuery = teamsQuery.eq('id', teamId);
-        } else {
-          teamsQuery = teamsQuery.limit(1);
-        }
+        const teamsData = teamsResult.status === 'fulfilled' ? teamsResult.value.data : null;
+        const teamError = teamsResult.status === 'fulfilled' ? teamsResult.value.error : teamsResult.reason;
         
-        const { data: teamsData, error: teamError } = await teamsQuery;
+        const allTeamsData = allTeamsResult.status === 'fulfilled' ? allTeamsResult.value.data : null;
+        const allTeamsError = allTeamsResult.status === 'fulfilled' ? allTeamsResult.value.error : allTeamsResult.reason;
         
         console.log('Teams query result:', { teamsData, teamError, teamsLength: teamsData?.length });
         
@@ -124,11 +128,6 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           console.error('Team error:', teamError);
           throw new Error(`Team error: ${teamError.message}`);
         }
-        
-        // Fetch all teams for handoff functionality
-        const { data: allTeamsData, error: allTeamsError } = await supabase
-          .from('teams')
-          .select('id, name, type, color');
         
         if (allTeamsError) {
           console.error('All teams error:', allTeamsError);

@@ -2,7 +2,10 @@ import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 
 export const auth = betterAuth({
-  database: memoryAdapter(),
+  database: memoryAdapter({
+    // Add some configuration for better session handling
+    sessionExpiry: 60 * 60 * 24 * 7, // 7 days
+  }),
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Set to false for easier testing
@@ -34,6 +37,10 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || 'your-secret-key-here-change-this-in-production',
   baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
   trustedOrigins: ['http://localhost:3000'],
+  logger: {
+    level: 'debug',
+    disabled: false,
+  },
 });
 
 export type Session = typeof auth.$Infer.Session;
