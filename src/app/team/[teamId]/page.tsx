@@ -1,5 +1,6 @@
 'use client';
 
+import { use } from 'react';
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -28,7 +29,7 @@ const PolandFlag = () => (
 );
 
 function TeamPageContent({ params }: TeamPageProps) {
-  const { user } = useAuth();
+  const { user, signOut: authSignOut } = useAuth();
   const resolvedParams = use(params);
   const [isPackageTrackerOpen, setIsPackageTrackerOpen] = useState(false);
 
@@ -96,58 +97,71 @@ function TeamPageContent({ params }: TeamPageProps) {
     try {
       console.log('Attempting to sign out...');
       
+      // Clear AuthProvider state first
+      authSignOut();
+      
+      // Clear Google OAuth cookies (these are what AuthProvider uses)
+      if (typeof document !== 'undefined') {
+        // Clear specific Google OAuth cookies
+        const cookiesToClear = [
+          'google_auth',
+          'user_name', 
+          'user_email',
+          'user_image',
+          'better-auth.session-token',
+          'better-auth.csrf-token'
+        ];
+        
+        cookiesToClear.forEach(cookieName => {
+          // Clear cookie for current path
+          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+          // Clear cookie for root path
+          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+          // Clear cookie for subdomain
+          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname};`;
+        });
+        
+        console.log('Cleared Google OAuth cookies');
+      }
+      
+      // Clear local storage
+      if (typeof localStorage !== 'undefined') {
+        localStorage.clear();
+        console.log('Cleared localStorage');
+      }
+      
+      // Clear session storage
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.clear();
+        console.log('Cleared sessionStorage');
+      }
+      
       // Try BetterAuth signOut with timeout
-      const signOutPromise = signOut();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('SignOut timeout')), 3000)
-      );
+      try {
+        const signOutPromise = signOut();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('SignOut timeout')), 2000)
+        );
+        
+        await Promise.race([signOutPromise, timeoutPromise]);
+        console.log('BetterAuth sign out successful');
+      } catch (authError) {
+        console.log('BetterAuth sign out failed, but continuing with cleanup:', authError);
+      }
       
-      await Promise.race([signOutPromise, timeoutPromise]);
-      console.log('Sign out successful');
+      console.log('Sign out complete, redirecting...');
       
-      // Redirect after successful sign out
-      window.location.href = '/';
+      // Force redirect to home page
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
       
     } catch (error) {
       console.error('Sign out error:', error);
       
-      // Fallback: Clear all authentication data and redirect
-      try {
-        console.log('Using fallback sign out method...');
-        
-        // Clear local storage
-        if (typeof localStorage !== 'undefined') {
-          localStorage.clear();
-        }
-        
-        // Clear session storage
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.clear();
-        }
-        
-        // Clear cookies
-        if (typeof document !== 'undefined') {
-          document.cookie.split(";").forEach((c) => {
-            document.cookie = c
-              .replace(/^ +/, "")
-              .replace(/=.*/, "=;expires=" + new Date().toISOString() + ";path=/");
-          });
-        }
-        
-        console.log('Fallback cleanup complete, redirecting...');
-        
-        // Force redirect
-        if (typeof window !== 'undefined') {
-          window.location.href = '/';
-        }
-        
-      } catch (fallbackError) {
-        console.error('Fallback sign out error:', fallbackError);
-        
-        // Last resort: force redirect
-        if (typeof window !== 'undefined') {
-          window.location.href = '/';
-        }
+      // Last resort: force redirect
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
       }
     }
   };

@@ -10,6 +10,7 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,11 +100,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   };
 
+  const handleSignOut = () => {
+    console.log('AuthProvider: Clearing user state');
+    setGoogleUser(null);
+    setAuthCheckComplete(false);
+  };
+
   const value: AuthContextType = {
     user: googleUser || session?.user || null,
     session: session || null,
     isLoading,
     isAuthenticated: !!googleUser || !!session?.user,
+    signOut: handleSignOut,
   };
 
   // Debug logging
