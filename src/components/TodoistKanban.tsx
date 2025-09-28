@@ -73,6 +73,13 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   const { user } = useAuth();
   const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = useStreakTracking();
   
+  // Helper function to ensure unique tasks by ID
+  const ensureUniqueTasks = (tasks: Task[]): Task[] => {
+    return tasks.filter((task, index, self) => 
+      index === self.findIndex(t => t.id === task.id)
+    );
+  };
+  
   // Debug user data
   console.log('TodoistKanban user data:', user);
   
@@ -534,10 +541,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         setColumns(columnsData);
         
         // Ensure unique tasks by ID to prevent React key conflicts
-        const uniqueTasks = tasksData.filter((task, index, self) => 
-          index === self.findIndex(t => t.id === task.id)
-        );
-        setTasks(uniqueTasks);
+        setTasks(ensureUniqueTasks(tasksData));
         
       } catch (err) {
         console.error('Fetch error:', err);
@@ -618,13 +622,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                   } : null
                 }));
 
-                // Ensure unique tasks by ID
-                const uniqueTasks = transformedTasks.filter((task, index, self) => 
-                  index === self.findIndex(t => t.id === task.id)
-                );
-                
-                console.log('✅ Real-time: Refreshed tasks with assignee data:', uniqueTasks.length, 'tasks');
-                setTasks(uniqueTasks);
+                console.log('✅ Real-time: Refreshed tasks with assignee data:', transformedTasks.length, 'tasks');
+                setTasks(ensureUniqueTasks(transformedTasks));
               } catch (err) {
                 console.error('Error refreshing tasks:', err);
               }
@@ -649,9 +648,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
               });
               
               // Ensure uniqueness after update
-              return updatedTasks.filter((task, index, self) => 
-                index === self.findIndex(t => t.id === task.id)
-              );
+              return ensureUniqueTasks(updatedTasks);
             });
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
@@ -733,6 +730,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
         if (error) {
           console.error('Polling error:', error);
+          // Don't return early, just log the error and continue
           return;
         }
 
@@ -762,7 +760,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             
             if (hasChanges) {
               console.log('Polling detected changes, updating tasks with assignee data');
-              return transformedTasks;
+              return ensureUniqueTasks(transformedTasks);
             }
             
             return prev;
