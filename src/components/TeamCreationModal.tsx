@@ -195,16 +195,6 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
               </div>
             </div>
 
-            {/* Use Templates Link */}
-            <div className="pt-1">
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:text-blue-700 underline"
-                disabled={isCreating}
-              >
-                Use Templates
-              </button>
-            </div>
 
             {/* Actions */}
             <div className="flex justify-end pt-4">
