@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Users, Palette, Lock, Eye } from 'lucide-react';
+import { Users, Palette, Lock, Eye, ChevronDown } from 'lucide-react';
 
 interface TeamCreationModalProps {
   isOpen: boolean;
@@ -31,14 +31,18 @@ const teamTypes = [
 ];
 
 const spaceIcons = [
-  { value: '💻', label: 'Development' },
+  { value: '📁', label: 'Folder' },
   { value: '👥', label: 'Team' },
   { value: '🎨', label: 'Design' },
+  { value: '💻', label: 'Development' },
   { value: '📝', label: 'Content' },
   { value: '📈', label: 'Marketing' },
   { value: '🔧', label: 'Engineering' },
   { value: '💡', label: 'Ideas' },
   { value: '🚀', label: 'Projects' },
+  { value: '🏢', label: 'Business' },
+  { value: '🎯', label: 'Goals' },
+  { value: '📊', label: 'Analytics' },
 ];
 
 const predefinedColors = [
@@ -56,10 +60,12 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
   const [teamName, setTeamName] = useState('');
   const [teamType, setTeamType] = useState<'design' | 'content' | 'development' | 'marketing' | 'other'>('other');
   const [selectedColor, setSelectedColor] = useState('#6B7280');
-  const [selectedIcon, setSelectedIcon] = useState('💻');
+  const [selectedIcon, setSelectedIcon] = useState('📁');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const iconPickerRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +86,7 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
       setTeamName('');
       setTeamType('other');
       setSelectedColor('#6B7280');
-      setSelectedIcon('💻');
+      setSelectedIcon('📁');
       setDescription('');
       setIsPrivate(false);
       onClose();
@@ -96,7 +102,7 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
       setTeamName('');
       setTeamType('other');
       setSelectedColor('#6B7280');
-      setSelectedIcon('💻');
+      setSelectedIcon('📁');
       setDescription('');
       setIsPrivate(false);
       onClose();
@@ -104,6 +110,23 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
   };
 
   const selectedTypeInfo = teamTypes.find(type => type.value === teamType);
+
+  // Close icon picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (iconPickerRef.current && !iconPickerRef.current.contains(event.target as Node)) {
+        setShowIconPicker(false);
+      }
+    };
+
+    if (showIconPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showIconPicker]);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -128,18 +151,40 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
               </label>
               <div className="flex items-center gap-3">
                 {/* Icon Selector */}
-                <button
-                  type="button"
-                  className="w-10 h-10 bg-gray-100 border border-gray-300 rounded-md flex items-center justify-center text-lg hover:bg-gray-200 transition-colors flex-shrink-0"
-                  onClick={() => {
-                    const currentIndex = spaceIcons.findIndex(icon => icon.value === selectedIcon);
-                    const nextIndex = (currentIndex + 1) % spaceIcons.length;
-                    setSelectedIcon(spaceIcons[nextIndex].value);
-                  }}
-                  disabled={isCreating}
-                >
-                  {selectedIcon}
-                </button>
+                <div className="relative" ref={iconPickerRef}>
+                  <button
+                    type="button"
+                    className="w-10 h-10 bg-gray-100 border border-gray-300 rounded-md flex items-center justify-center text-lg hover:bg-gray-200 transition-colors flex-shrink-0"
+                    onClick={() => setShowIconPicker(!showIconPicker)}
+                    disabled={isCreating}
+                  >
+                    {selectedIcon}
+                  </button>
+                  
+                  {/* Icon Picker Dropdown */}
+                  {showIconPicker && (
+                    <div className="absolute top-12 left-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[200px]">
+                      <div className="grid grid-cols-4 gap-2">
+                        {spaceIcons.map((icon) => (
+                          <button
+                            key={icon.value}
+                            type="button"
+                            onClick={() => {
+                              setSelectedIcon(icon.value);
+                              setShowIconPicker(false);
+                            }}
+                            className={`w-8 h-8 rounded-md flex items-center justify-center text-sm hover:bg-gray-100 transition-colors ${
+                              selectedIcon === icon.value ? 'bg-blue-100 ring-2 ring-blue-500' : ''
+                            }`}
+                            title={icon.label}
+                          >
+                            {icon.value}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 
                 {/* Name Input */}
                 <input
