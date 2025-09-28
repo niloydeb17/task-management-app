@@ -30,6 +30,7 @@ interface TeamCreationModalProps {
     color?: string;
     description?: string;
     isPrivate?: boolean;
+    icon?: string;
   }) => Promise<void>;
 }
 
@@ -215,7 +216,8 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
         type: teamType,
         color: selectedColor,
         description: description.trim(),
-        isPrivate
+        isPrivate,
+        icon: selectedIcon
       });
       
       // Reset form

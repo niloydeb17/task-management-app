@@ -25,7 +25,69 @@ import {
   FolderOpen,
   MoreHorizontal,
   Edit,
-  Trash2
+  Trash2,
+  Folder,
+  Code,
+  FileText,
+  TrendingUp,
+  Wrench,
+  Lightbulb,
+  Rocket,
+  Building,
+  Target,
+  BarChart3,
+  Briefcase,
+  Heart,
+  Star as StarIcon,
+  Shield,
+  Zap,
+  Globe,
+  Mail,
+  Phone,
+  Calendar as CalendarIcon,
+  Clock as ClockIcon,
+  User,
+  Crown,
+  Award,
+  Gift,
+  Coffee,
+  Car,
+  Plane,
+  Camera,
+  Music,
+  Video,
+  Book,
+  File,
+  Download,
+  Share,
+  Link,
+  Plus as PlusIcon,
+  Minus,
+  Check,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  Trash,
+  Copy,
+  Save,
+  Refresh,
+  RotateCcw,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Mic,
+  Bell,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon,
+  Cloud,
+  CloudRain
 } from "lucide-react";
 import { useTeams } from "@/hooks/useTeams";
 import { TeamCreationModal } from "@/components/TeamCreationModal";
@@ -40,6 +102,74 @@ interface TodoistSidebarProps {
     role: string;
   };
 }
+
+// Icon mapping for team icons
+const iconMap: Record<string, any> = {
+  'Folder': Folder,
+  'Users': Users,
+  'Code': Code,
+  'FileText': FileText,
+  'TrendingUp': TrendingUp,
+  'Wrench': Wrench,
+  'Lightbulb': Lightbulb,
+  'Rocket': Rocket,
+  'Building': Building,
+  'Target': Target,
+  'BarChart3': BarChart3,
+  'Briefcase': Briefcase,
+  'Heart': Heart,
+  'Star': StarIcon,
+  'Shield': Shield,
+  'Zap': Zap,
+  'Globe': Globe,
+  'Mail': Mail,
+  'Phone': Phone,
+  'Calendar': CalendarIcon,
+  'Clock': ClockIcon,
+  'User': User,
+  'Crown': Crown,
+  'Award': Award,
+  'Gift': Gift,
+  'Coffee': Coffee,
+  'Car': Car,
+  'Plane': Plane,
+  'Camera': Camera,
+  'Music': Music,
+  'Video': Video,
+  'Book': Book,
+  'File': File,
+  'Download': Download,
+  'Share': Share,
+  'Link': Link,
+  'Plus': PlusIcon,
+  'Minus': Minus,
+  'Check': Check,
+  'X': X,
+  'ArrowRight': ArrowRight,
+  'ArrowLeft': ArrowLeft,
+  'ArrowUp': ArrowUp,
+  'ArrowDown': ArrowDown,
+  'Edit': Edit,
+  'Trash': Trash,
+  'Copy': Copy,
+  'Save': Save,
+  'Refresh': Refresh,
+  'RotateCcw': RotateCcw,
+  'Play': Play,
+  'Pause': Pause,
+  'Volume2': Volume2,
+  'VolumeX': VolumeX,
+  'Mic': Mic,
+  'Bell': Bell,
+  'Lock': Lock,
+  'Unlock': Unlock,
+  'Eye': Eye,
+  'EyeOff': EyeOff,
+  'Sun': Sun,
+  'Moon': Moon,
+  'Cloud': Cloud,
+  'CloudRain': CloudRain,
+};
 
 export function TodoistSidebar({ user }: TodoistSidebarProps) {
   const pathname = usePathname();
@@ -69,6 +199,9 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
     name: string;
     type: 'design' | 'content' | 'development' | 'marketing' | 'other';
     color?: string;
+    description?: string;
+    isPrivate?: boolean;
+    icon?: string;
   }) => {
     await createTeam(teamData);
   };
@@ -381,7 +514,10 @@ function SortableTeamItem({ team, pathname, onEditTeam, onDeleteTeam, isActive }
           }
         }}
       >
-        <FolderOpen className="w-4 h-4" />
+        {(() => {
+          const IconComponent = iconMap[team.icon] || FolderOpen;
+          return <IconComponent className="w-4 h-4" />;
+        })()}
         <span>#{team.name}</span>
       </Link>
       

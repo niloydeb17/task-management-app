@@ -9,6 +9,9 @@ export interface Team {
   type: 'design' | 'content' | 'development' | 'marketing' | 'other';
   color: string;
   position?: number; // Added position field
+  description?: string;
+  isPrivate?: boolean;
+  icon?: string;
   board_template: {
     columns: Array<{
       id: string;
@@ -25,6 +28,9 @@ export interface CreateTeamData {
   name: string;
   type: 'design' | 'content' | 'development' | 'marketing' | 'other';
   color?: string;
+  description?: string;
+  isPrivate?: boolean;
+  icon?: string;
 }
 
 const defaultBoardTemplate = {
@@ -101,6 +107,9 @@ export function useTeams() {
         name: teamData.name,
         type: teamData.type,
         color: teamData.color || teamTypeColors[teamData.type],
+        description: teamData.description || '',
+        isPrivate: teamData.isPrivate || false,
+        icon: teamData.icon || 'Folder',
         board_template: defaultBoardTemplate,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
