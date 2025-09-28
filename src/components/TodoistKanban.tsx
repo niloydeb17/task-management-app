@@ -532,7 +532,12 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         console.log('Number of tasks:', tasksData.length);
         
         setColumns(columnsData);
-        setTasks(tasksData);
+        
+        // Ensure unique tasks by ID to prevent React key conflicts
+        const uniqueTasks = tasksData.filter((task, index, self) => 
+          index === self.findIndex(t => t.id === task.id)
+        );
+        setTasks(uniqueTasks);
         
       } catch (err) {
         console.error('Fetch error:', err);
@@ -613,8 +618,13 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                   } : null
                 }));
 
-                console.log('✅ Real-time: Refreshed tasks with assignee data:', transformedTasks.length, 'tasks');
-                setTasks(transformedTasks);
+                // Ensure unique tasks by ID
+                const uniqueTasks = transformedTasks.filter((task, index, self) => 
+                  index === self.findIndex(t => t.id === task.id)
+                );
+                
+                console.log('✅ Real-time: Refreshed tasks with assignee data:', uniqueTasks.length, 'tasks');
+                setTasks(uniqueTasks);
               } catch (err) {
                 console.error('Error refreshing tasks:', err);
               }
@@ -625,17 +635,24 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             // Task updated (moved, edited, etc.) - preserve assignee info
             const updatedTask = payload.new as Task;
             console.log('✅ Updating task via real-time:', updatedTask.title);
-            setTasks(prev => prev.map(task => {
-              if (task.id === updatedTask.id) {
-                // Preserve the assignee information from the existing task
-                return { 
-                  ...task, 
-                  ...updatedTask, 
-                  assignee: task.assignee // Keep the existing assignee info
-                };
-              }
-              return task;
-            }));
+            setTasks(prev => {
+              const updatedTasks = prev.map(task => {
+                if (task.id === updatedTask.id) {
+                  // Preserve the assignee information from the existing task
+                  return { 
+                    ...task, 
+                    ...updatedTask, 
+                    assignee: task.assignee // Keep the existing assignee info
+                  };
+                }
+                return task;
+              });
+              
+              // Ensure uniqueness after update
+              return updatedTasks.filter((task, index, self) => 
+                index === self.findIndex(t => t.id === task.id)
+              );
+            });
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
             const deletedTask = payload.old as Task;
@@ -1675,8 +1692,15 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       console.log('🔄 Real-time update will sync across all connected clients');
       console.log('=================================');
 
-      // Add the created task to local state
-      setTasks(prev => [data, ...prev]);
+      // Add the created task to local state - check for duplicates
+      setTasks(prev => {
+        const taskExists = prev.some(task => task.id === data.id);
+        if (taskExists) {
+          console.log('Task already exists in local state, skipping add:', data.id);
+          return prev;
+        }
+        return [data, ...prev];
+      });
       
     } catch (err) {
       console.error('Failed to create task:', err);
