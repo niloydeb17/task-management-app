@@ -79,7 +79,11 @@ export function useTeams() {
         throw new Error(`Failed to fetch teams: ${fetchError.message}`);
       }
 
-      setTeams(data || []);
+      // Ensure unique teams by ID
+      const uniqueTeams = (data || []).filter((team, index, self) => 
+        index === self.findIndex(t => t.id === team.id)
+      );
+      setTeams(uniqueTeams);
     } catch (err) {
       console.error('Fetch teams error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -113,8 +117,15 @@ export function useTeams() {
         throw new Error(`Failed to create team: ${insertError.message}`);
       }
 
-      // Add to local state
-      setTeams(prev => [data, ...prev]);
+      // Add to local state - check for duplicates
+      setTeams(prev => {
+        const teamExists = prev.some(team => team.id === data.id);
+        if (teamExists) {
+          console.log('Team already exists in local state, skipping add:', data.id);
+          return prev;
+        }
+        return [data, ...prev];
+      });
       
       return data;
     } catch (err) {
@@ -258,12 +269,21 @@ export function useTeams() {
                 team.id === payload.new.id ? { ...team, ...payload.new } : team
               );
               
-              // Sort by position after update
-              return updatedTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
+              // Ensure uniqueness and sort by position
+              const uniqueTeams = updatedTeams.filter((team, index, self) => 
+                index === self.findIndex(t => t.id === team.id)
+              );
+              return uniqueTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
             });
           } else if (payload.eventType === 'INSERT') {
-            // Handle new team creation
+            // Handle new team creation - check if team already exists
             setTeams(prev => {
+              const teamExists = prev.some(team => team.id === payload.new.id);
+              if (teamExists) {
+                console.log('Team already exists, skipping insert:', payload.new.id);
+                return prev;
+              }
+              
               const newTeams = [...prev, payload.new];
               return newTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
             });
