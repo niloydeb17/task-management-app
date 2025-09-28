@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -107,6 +108,9 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md w-full mx-4 p-0 border-0 shadow-xl">
+        <VisuallyHidden>
+          <DialogTitle>Create a Space</DialogTitle>
+        </VisuallyHidden>
         <div className="p-6">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
