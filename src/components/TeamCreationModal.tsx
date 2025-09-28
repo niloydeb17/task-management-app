@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { X, Users, Palette, Lock, Eye } from 'lucide-react';
+import { Users, Palette, Lock, Eye } from 'lucide-react';
 
 interface TeamCreationModalProps {
   isOpen: boolean;
@@ -113,20 +113,11 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
         </VisuallyHidden>
         <div className="p-6">
           {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Create a Space</h2>
-              <p className="text-sm text-gray-600 leading-5">
-                A Space represents teams, departments, or groups, each with its own Lists, workflows, and settings.
-              </p>
-            </div>
-            <button
-              onClick={handleClose}
-              disabled={isCreating}
-              className="ml-4 p-1 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Create a Space</h2>
+            <p className="text-sm text-gray-600 leading-5">
+              A Space represents teams, departments, or groups, each with its own Lists, workflows, and settings.
+            </p>
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-5">
