@@ -1924,7 +1924,7 @@ function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClic
     >
       <DroppableColumn
         column={column}
-        tasks={tasks}
+        tasks={tasks.filter(task => task.column_id === column.id)}
         getPriorityColor={getPriorityColor}
         onAddTask={onAddTask}
         onTaskClick={onTaskClick}
