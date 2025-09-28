@@ -9,17 +9,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Users, Palette, Lock, Eye, ChevronDown, Search, Upload,
-  Folder, FolderOpen, Briefcase, Building, Target, BarChart3,
-  Lightbulb, Rocket, Wrench, Code, PenTool, FileText, TrendingUp,
-  Heart, Star, Shield, Zap, Globe, Mail, Phone, Calendar, Clock,
-  Settings, User, UserPlus, Users2, Crown, Award, Gift, Coffee,
-  Home, Car, Plane, Train, Bike, Camera, Music, Video, Image,
-  Book, BookOpen, File, FileCheck, Download, Share, Link,
-  Plus, Minus, Check, X, ArrowRight, ArrowLeft, ArrowUp, ArrowDown,
-  Edit, Trash, Copy, Save, Refresh, RotateCcw, Play, Pause,
-  Volume2, VolumeX, Mic, MicOff, Bell, BellOff, Lock as LockIcon,
-  Unlock, Eye as EyeIcon, EyeOff, Sun, Moon, Cloud, CloudRain
+  Users, Search, Upload, Folder, Briefcase, Building, Target, 
+  BarChart3, Lightbulb, Rocket, Wrench, Code, PenTool, FileText, 
+  TrendingUp, Heart, Star, Shield, Zap, Globe, Mail, Phone, 
+  Calendar, Clock, Settings, User, UserPlus, Crown, Award, 
+  Gift, Coffee, Home, Car, Plane, Camera, Music, Video, 
+  Book, File, Download, Share, Link, Plus, Minus, Check, 
+  X, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Edit, Trash, 
+  Copy, Save, Refresh, RotateCcw, Play, Pause, Volume2, 
+  VolumeX, Mic, Bell, Lock, Unlock, Eye, EyeOff, Sun, 
+  Moon, Cloud, CloudRain
 } from 'lucide-react';
 
 interface TeamCreationModalProps {
@@ -44,9 +43,7 @@ const teamTypes = [
 
 const spaceIcons = [
   { value: 'Folder', label: 'Folder', icon: Folder },
-  { value: 'FolderOpen', label: 'Folder Open', icon: FolderOpen },
   { value: 'Users', label: 'Team', icon: Users },
-  { value: 'Users2', label: 'Team 2', icon: Users2 },
   { value: 'PenTool', label: 'Design', icon: PenTool },
   { value: 'Code', label: 'Development', icon: Code },
   { value: 'FileText', label: 'Content', icon: FileText },
@@ -77,16 +74,11 @@ const spaceIcons = [
   { value: 'Home', label: 'Home', icon: Home },
   { value: 'Car', label: 'Transport', icon: Car },
   { value: 'Plane', label: 'Travel', icon: Plane },
-  { value: 'Train', label: 'Train', icon: Train },
-  { value: 'Bike', label: 'Bike', icon: Bike },
   { value: 'Camera', label: 'Camera', icon: Camera },
   { value: 'Music', label: 'Music', icon: Music },
   { value: 'Video', label: 'Video', icon: Video },
-  { value: 'Image', label: 'Image', icon: Image },
   { value: 'Book', label: 'Book', icon: Book },
-  { value: 'BookOpen', label: 'Book Open', icon: BookOpen },
   { value: 'File', label: 'File', icon: File },
-  { value: 'FileCheck', label: 'File Check', icon: FileCheck },
   { value: 'Download', label: 'Download', icon: Download },
   { value: 'Share', label: 'Share', icon: Share },
   { value: 'Link', label: 'Link', icon: Link },
@@ -109,12 +101,10 @@ const spaceIcons = [
   { value: 'Volume2', label: 'Volume', icon: Volume2 },
   { value: 'VolumeX', label: 'Mute', icon: VolumeX },
   { value: 'Mic', label: 'Microphone', icon: Mic },
-  { value: 'MicOff', label: 'Mic Off', icon: MicOff },
   { value: 'Bell', label: 'Notification', icon: Bell },
-  { value: 'BellOff', label: 'No Notifications', icon: BellOff },
-  { value: 'LockIcon', label: 'Lock', icon: LockIcon },
+  { value: 'Lock', label: 'Lock', icon: Lock },
   { value: 'Unlock', label: 'Unlock', icon: Unlock },
-  { value: 'EyeIcon', label: 'View', icon: EyeIcon },
+  { value: 'Eye', label: 'View', icon: Eye },
   { value: 'EyeOff', label: 'Hide', icon: EyeOff },
   { value: 'Sun', label: 'Sun', icon: Sun },
   { value: 'Moon', label: 'Moon', icon: Moon },
