@@ -155,12 +155,11 @@ export function TodoistSidebar({ user }: TodoistSidebarProps) {
       {/* User Profile */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <Avatar className="w-8 h-8">
-            <AvatarImage src="" />
-            <AvatarFallback className="bg-blue-500 text-white text-sm">
-              {"M"}
-            </AvatarFallback>
-          </Avatar>
+          <img 
+            src="/logo-m.svg" 
+            alt="User Avatar" 
+            className="w-8 h-8"
+          />
           <div className="flex-1">
             <div className="flex items-center space-x-1">
               <span className="text-sm font-medium text-gray-900">

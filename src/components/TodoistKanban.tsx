@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/components/AuthProvider";
 import { signOut } from "@/lib/auth-client";
+import { useStreakTracking } from "@/hooks/useStreakTracking";
+import { StreakCelebrationPopup } from "@/components/StreakCelebrationPopup";
 import { supabase } from "@/lib/supabase";
 import { TaskCreationModal } from "@/components/TaskCreationModal";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -35,6 +37,7 @@ import { SectionCreationModal } from "@/components/SectionCreationModal";
 import { ColumnEditModal } from "@/components/ColumnEditModal";
 import { HandoffService } from "@/lib/handoff";
 import { HandoffForm } from "@/types";
+import LoaderOne from "@/components/ui/loader-one";
 
 interface Task {
   id: string;
@@ -68,6 +71,7 @@ interface TodoistKanbanProps {
 
 export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps) {
   const { user } = useAuth();
+  const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = useStreakTracking();
   
   // Debug user data
   console.log('TodoistKanban user data:', user);
@@ -463,10 +467,15 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             throw new Error('No board template found');
           }
           
-          // Get tasks from database
+          // Get tasks from database with assignee information
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
-            .select('id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status')
+            .select(`
+              id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
+              handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
+              assignee_id,
+              users:assignee_id (id, name, email, avatar)
+            `)
             .eq('team_id', teamData.id)
             .order('position', { ascending: true });
           
@@ -475,18 +484,29 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             throw new Error(`Tasks error: ${tasksError.message}`);
           }
           
+          console.log('=== TASKS LOADED FROM DATABASE ===');
           console.log('Real tasks loaded:', { 
             count: dbTasksData?.length, 
             sample: dbTasksData?.[0],
             teamId: teamData.id,
             statusInfo: dbTasksData?.map(task => ({ id: task.id, title: task.title, column_id: task.column_id, status: task.status }))
           });
+          console.log('Tasks with assignee info:', dbTasksData?.map(task => ({ 
+            id: task.id, 
+            title: task.title, 
+            assignee_id: task.assignee_id, 
+            assignee_user: task.users 
+          })));
+          console.log('===================================');
           
           // Transform database tasks to match UI expectations
           tasksData = (dbTasksData || []).map((task: any) => ({
             ...task,
             progress: '0/1', // Default progress
-            assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' } // Default assignee
+            assignee: task.users ? {
+              name: task.users.name,
+              avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
+            } : null // Use actual assignee data or null if no assignee
           }));
           
           console.log('Fetched tasks from database:', tasksData);
@@ -530,6 +550,9 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   useEffect(() => {
     if (!currentTeam?.id) return;
 
+    // Track processed events to avoid duplicates
+    const processedEvents = new Set<string>();
+    
     const channel = supabase
       .channel(`kanban-realtime-${currentTeam.id}`)
       .on(
@@ -541,25 +564,79 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           filter: `team_id=eq.${currentTeam.id}`
         },
         (payload) => {
+          const eventKey = `${payload.eventType}-${payload.new?.id || payload.old?.id}`;
+          
+          // Skip if we've already processed this event
+          if (processedEvents.has(eventKey)) {
+            console.log('Skipping duplicate real-time event:', eventKey);
+            return;
+          }
+          
+          processedEvents.add(eventKey);
+          
+          // Clean up old events after 5 seconds
+          setTimeout(() => {
+            processedEvents.delete(eventKey);
+          }, 5000);
+          
           console.log('Real-time task update:', payload.eventType, payload);
           setLastUpdate(new Date());
           
           if (payload.eventType === 'INSERT') {
-            // New task created
-            const newTask = payload.new as Task;
-            setTasks(prev => {
-              const exists = prev.some(task => task.id === newTask.id);
-              if (exists) return prev;
-              console.log('✅ Adding new task via real-time:', newTask.title);
-              return [newTask, ...prev];
-            });
+            // New task created - refresh the entire task list to get assignee data
+            console.log('Real-time INSERT: Refreshing task list for:', payload.new.title);
+            
+            // Refresh tasks with assignee data
+            const refreshTasks = async () => {
+              try {
+                const { data: tasksData, error } = await supabase
+                  .from('tasks')
+                  .select(`
+                    id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
+                    handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
+                    assignee_id,
+                    users:assignee_id (id, name, email, avatar)
+                  `)
+                  .eq('team_id', currentTeam.id)
+                  .order('position', { ascending: true });
+
+                if (error) {
+                  console.error('Error refreshing tasks:', error);
+                  return;
+                }
+
+                const transformedTasks = tasksData.map(task => ({
+                  ...task,
+                  progress: '0/1',
+                  assignee: task.users ? {
+                    name: task.users.name,
+                    avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
+                  } : null
+                }));
+
+                console.log('✅ Real-time: Refreshed tasks with assignee data:', transformedTasks.length, 'tasks');
+                setTasks(transformedTasks);
+              } catch (err) {
+                console.error('Error refreshing tasks:', err);
+              }
+            };
+
+            refreshTasks();
           } else if (payload.eventType === 'UPDATE') {
-            // Task updated (moved, edited, etc.)
+            // Task updated (moved, edited, etc.) - preserve assignee info
             const updatedTask = payload.new as Task;
             console.log('✅ Updating task via real-time:', updatedTask.title);
-            setTasks(prev => prev.map(task => 
-              task.id === updatedTask.id ? { ...task, ...updatedTask } : task
-            ));
+            setTasks(prev => prev.map(task => {
+              if (task.id === updatedTask.id) {
+                // Preserve the assignee information from the existing task
+                return { 
+                  ...task, 
+                  ...updatedTask, 
+                  assignee: task.assignee // Keep the existing assignee info
+                };
+              }
+              return task;
+            }));
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
             const deletedTask = payload.old as Task;
@@ -629,7 +706,12 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       try {
         const { data: latestTasks, error } = await supabase
           .from('tasks')
-          .select('id, title, description, priority, column_id, tags, due_date, created_at, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, position, updated_at, status')
+          .select(`
+            id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
+            handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
+            assignee_id,
+            users:assignee_id (id, name, email, avatar)
+          `)
           .eq('team_id', currentTeam.id)
           .order('updated_at', { ascending: false });
 
@@ -640,8 +722,18 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
         if (latestTasks) {
           setTasks(prev => {
+            // Transform tasks to include assignee data
+            const transformedTasks = latestTasks.map(task => ({
+              ...task,
+              progress: '0/1',
+              assignee: task.users ? {
+                name: task.users.name,
+                avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
+              } : null
+            }));
+
             // Check for any changes in task positions or columns
-            const hasChanges = latestTasks.some(newTask => {
+            const hasChanges = transformedTasks.some(newTask => {
               const oldTask = prev.find(old => old.id === newTask.id);
               if (!oldTask) return true; // New task
               
@@ -653,8 +745,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             });
             
             if (hasChanges) {
-              console.log('Polling detected changes, updating tasks');
-              return latestTasks;
+              console.log('Polling detected changes, updating tasks with assignee data');
+              return transformedTasks;
             }
             
             return prev;
@@ -1123,6 +1215,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
         console.log('🔄 Real-time update will sync across all connected clients');
         
+        // Track task completion for streak
+        if (newStatus.isCompleted && user?.id === activeTask.assignee_id && trackTaskCompletion) {
+          await trackTaskCompletion(activeTask.id, true);
+        }
+        
       } catch (err) {
         console.error('Failed to move task between columns:', err);
         // Revert local state on error
@@ -1258,6 +1355,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         console.log('✅ Cross-column task move completed successfully!');
         console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
         console.log('🔄 Real-time update will sync across all connected clients');
+        
+        // Track task completion for streak
+        if (newStatus.isCompleted && user?.id === activeTask.assignee_id && trackTaskCompletion) {
+          await trackTaskCompletion(activeTask.id, true);
+        }
         
       } catch (err) {
         console.error('Failed to move task between columns:', err);
@@ -1519,7 +1621,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         description: newTask.description || null,
         status: initialStatus,
         priority: newTask.priority || 'medium',
-        assignee_id: null, // TODO: Handle assignee mapping
+        assignee_id: newTask.assignee_id || null, // Use the assignee_id from the task creation modal
         team_id: effectiveTeamId, // Use the effective team ID
         column_id: newTask.column_id || "backlog",
         position: newTask.position || 0, // Try to include position field
@@ -1536,6 +1638,14 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         completed_at: null
       };
 
+      // Debug logging
+      console.log('=== TASK CREATION DEBUG ===');
+      console.log('New task from modal:', newTask);
+      console.log('Assignee ID from modal:', newTask.assignee_id);
+      console.log('Assignee name from modal:', newTask.assignee);
+      console.log('Task data being inserted:', taskData);
+      console.log('===========================');
+
       // Insert task into database
       console.log('Inserting task data:', taskData);
       
@@ -1546,18 +1656,25 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         .single();
 
       if (error) {
+        console.error('=== DATABASE INSERT ERROR ===');
         console.error('Error creating task:', {
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code
         });
+        console.error('Task data that failed:', taskData);
+        console.error('================================');
         alert(`Failed to create task: ${error.message}`);
         return;
       }
 
+      console.log('=== TASK CREATED SUCCESSFULLY ===');
       console.log('✅ Task created successfully:', data.title);
+      console.log('Created task data:', data);
+      console.log('Assignee ID in created task:', data.assignee_id);
       console.log('🔄 Real-time update will sync across all connected clients');
+      console.log('=================================');
 
       // Add the created task to local state
       setTasks(prev => [data, ...prev]);
@@ -1586,7 +1703,9 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="mb-4">
+            <LoaderOne />
+          </div>
           <p className="text-gray-600">Loading Kanban board...</p>
         </div>
       </div>
@@ -1662,7 +1781,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             
             {/* Add Section Button */}
             <div className="flex-shrink-0 w-72 min-w-72">
-              <Button 
+              <Button
                 variant="ghost" 
                 className="w-full h-12 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600"
                 onClick={() => setIsSectionModalOpen(true)}
@@ -1670,6 +1789,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                 <Plus className="w-4 h-4 mr-2" />
                 Add section
               </Button>
+              
             </div>
           </div>
         </div>
@@ -1721,6 +1841,14 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         onHandoff={handleHandoff}
         teams={teams}
         currentTeam={currentTeam}
+      />
+
+      {/* Streak Celebration Popup */}
+      <StreakCelebrationPopup
+        isOpen={showStreakPopup}
+        onClose={closeStreakPopup}
+        currentStreak={streakData.currentStreak}
+        completedTasks={streakData.completedTasksToday}
       />
     </div>
   );
@@ -2076,17 +2204,27 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
               )}
               
               {/* Assignee Avatar */}
-              <div 
-                className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Avatar className="w-5 h-5">
-                  <AvatarImage src={task.assignee?.avatar} />
-                  <AvatarFallback className="text-xs">
-                    {task.assignee?.name?.charAt(0) || 'S'}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
+              {task.assignee ? (
+                <div 
+                  className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Avatar className="w-5 h-5">
+                    <AvatarImage src={task.assignee.avatar} />
+                    <AvatarFallback className="text-xs">
+                      {task.assignee.name?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+              ) : (
+                <div 
+                  className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                  title="No assignee"
+                >
+                  <User className="w-3 h-3 text-gray-400" />
+                </div>
+              )}
             </div>
           </div>
         </div>

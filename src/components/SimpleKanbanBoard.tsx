@@ -18,7 +18,10 @@ import {
   GripVertical,
   Settings
 } from "lucide-react";
+import LoaderOne from "@/components/ui/loader-one";
 import { supabase } from "@/lib/supabase";
+import { useStreakTracking } from "@/hooks/useStreakTracking";
+import { StreakCelebrationPopup } from "@/components/StreakCelebrationPopup";
 
 interface Task {
   id: string;
@@ -38,6 +41,7 @@ interface Column {
 }
 
 export function SimpleKanbanBoard() {
+  const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = useStreakTracking();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,7 +152,12 @@ export function SimpleKanbanBoard() {
           // Get tasks from database
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
-            .select('id, title, description, priority, column_id, tags, due_date, created_at, handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at')
+            .select(`
+              id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
+              handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
+              assignee_id,
+              users:assignee_id (id, name, email, avatar)
+            `)
             .eq('team_id', teamData.id)
             .order('created_at', { ascending: false });
           
@@ -167,8 +176,18 @@ export function SimpleKanbanBoard() {
           color: col.color
         }));
         
+        // Transform tasks to include assignee data
+        const transformedTasks = tasksData.map((task: any) => ({
+          ...task,
+          progress: '0/1',
+          assignee: task.users ? {
+            name: task.users.name,
+            avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
+          } : null
+        }));
+
         setColumns(columnsData);
-        setTasks(tasksData);
+        setTasks(transformedTasks);
         
       } catch (err) {
         console.error('Fetch error:', err);
@@ -198,20 +217,59 @@ export function SimpleKanbanBoard() {
           console.log('Real-time task update received in SimpleKanbanBoard:', payload);
           
           if (payload.eventType === 'INSERT') {
-            // New task created
-            const newTask = payload.new as Task;
-            setTasks(prev => {
-              // Check if task already exists to avoid duplicates
-              const exists = prev.some(task => task.id === newTask.id);
-              if (exists) return prev;
-              return [newTask, ...prev];
-            });
+            // New task created - refresh the entire task list to get assignee data
+            console.log('SimpleKanbanBoard: Real-time INSERT: Refreshing task list for:', payload.new.title);
+            
+            // Refresh tasks with assignee data
+            const refreshTasks = async () => {
+              try {
+                const { data: tasksData, error } = await supabase
+                  .from('tasks')
+                  .select(`
+                    id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
+                    handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
+                    assignee_id,
+                    users:assignee_id (id, name, email, avatar)
+                  `)
+                  .eq('team_id', currentTeam.id)
+                  .order('position', { ascending: true });
+
+                if (error) {
+                  console.error('Error refreshing tasks in SimpleKanbanBoard:', error);
+                  return;
+                }
+
+                const transformedTasks = tasksData.map(task => ({
+                  ...task,
+                  progress: '0/1',
+                  assignee: task.users ? {
+                    name: task.users.name,
+                    avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
+                  } : null
+                }));
+
+                console.log('✅ SimpleKanbanBoard: Real-time: Refreshed tasks with assignee data:', transformedTasks.length, 'tasks');
+                setTasks(transformedTasks);
+              } catch (err) {
+                console.error('Error refreshing tasks in SimpleKanbanBoard:', err);
+              }
+            };
+
+            refreshTasks();
           } else if (payload.eventType === 'UPDATE') {
-            // Task updated
+            // Task updated - preserve assignee info
             const updatedTask = payload.new as Task;
-            setTasks(prev => prev.map(task => 
-              task.id === updatedTask.id ? { ...task, ...updatedTask } : task
-            ));
+            setTasks(prev => prev.map(task => {
+              if (task.id === updatedTask.id) {
+                // Preserve the assignee information from the existing task
+                return { 
+                  ...task, 
+                  ...updatedTask, 
+                  assignee: task.assignee // Keep the existing assignee info
+                };
+              }
+              return task;
+            }));
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
             const deletedTask = payload.old as Task;
@@ -322,6 +380,11 @@ export function SimpleKanbanBoard() {
       console.log('✅ Task moved successfully!');
       console.log(`📊 Task status updated: ${activeTask.title} → ${newStatus.name} (${newStatus.color})`);
       
+      // Track task completion for streak
+      if (newStatus.isCompleted) {
+        await trackTaskCompletion(activeTask.id, true);
+      }
+      
     } catch (err) {
       console.error('Failed to update task:', err);
       // Revert local state on error
@@ -358,7 +421,9 @@ export function SimpleKanbanBoard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="mb-4">
+            <LoaderOne />
+          </div>
           <p className="text-gray-600">Loading Kanban board...</p>
         </div>
       </div>
@@ -387,7 +452,7 @@ export function SimpleKanbanBoard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-kanban-board>
 
       {/* Kanban Board */}
       <DndContext
@@ -496,6 +561,8 @@ function SortableTaskItem({ task, priorityColor }: SortableTaskItemProps) {
     <div
       ref={setNodeRef}
       style={style}
+      data-task-title={task.title}
+      data-task-id={task.id}
       className={`bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all ${
         isDragging ? 'opacity-50 shadow-lg' : ''
       }`}
@@ -592,6 +659,14 @@ function SortableTaskItem({ task, priorityColor }: SortableTaskItemProps) {
           </div>
         </div>
       </div>
+
+      {/* Streak Celebration Popup */}
+      <StreakCelebrationPopup
+        isOpen={showStreakPopup}
+        onClose={closeStreakPopup}
+        currentStreak={streakData.currentStreak}
+        completedTasks={streakData.completedTasksToday}
+      />
     </div>
   );
 }
