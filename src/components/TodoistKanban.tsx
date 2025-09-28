@@ -541,7 +541,18 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         setColumns(columnsData);
         
         // Ensure unique tasks by ID to prevent React key conflicts
-        setTasks(ensureUniqueTasks(tasksData));
+        const uniqueTasks = ensureUniqueTasks(tasksData);
+        console.log('📊 Tasks loaded:', {
+          originalCount: tasksData.length,
+          uniqueCount: uniqueTasks.length,
+          duplicatesRemoved: tasksData.length - uniqueTasks.length,
+          taskIds: uniqueTasks.map(t => t.id),
+          columnDistribution: uniqueTasks.reduce((acc, task) => {
+            acc[task.column_id] = (acc[task.column_id] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>)
+        });
+        setTasks(uniqueTasks);
         
       } catch (err) {
         console.error('Fetch error:', err);
@@ -729,7 +740,14 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           .order('updated_at', { ascending: false });
 
         if (error) {
-          console.error('Polling error:', error);
+          console.error('Polling error:', {
+            error,
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorDetails: error.details,
+            teamId: currentTeam.id,
+            timestamp: new Date().toISOString()
+          });
           // Don't return early, just log the error and continue
           return;
         }
@@ -1924,7 +1942,18 @@ function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClic
     >
       <DroppableColumn
         column={column}
-        tasks={tasks.filter(task => task.column_id === column.id)}
+        tasks={(() => {
+          const columnTasks = tasks.filter(task => task.column_id === column.id);
+          console.log(`🔍 Column ${column.id} (${column.name}):`, {
+            totalTasks: tasks.length,
+            columnTasks: columnTasks.length,
+            taskIds: columnTasks.map(t => t.id),
+            duplicateCheck: columnTasks.filter((task, index, self) => 
+              index !== self.findIndex(t => t.id === task.id)
+            ).length
+          });
+          return columnTasks;
+        })()}
         getPriorityColor={getPriorityColor}
         onAddTask={onAddTask}
         onTaskClick={onTaskClick}
