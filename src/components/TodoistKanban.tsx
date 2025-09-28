@@ -2067,18 +2067,15 @@ function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskCli
             : 'hover:bg-gray-50'
         }`}
       >
-        {(() => {
-          // Deduplicate tasks within this column
-          const uniqueTasks = tasks.filter((task, index, self) => 
+        <SortableContext 
+          items={tasks.filter((task, index, self) => 
             index === self.findIndex(t => t.id === task.id)
-          );
-          
-          return (
-            <SortableContext 
-              items={uniqueTasks.map(task => task.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {uniqueTasks.map((task, index) => (
+          ).map(task => task.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {tasks.filter((task, index, self) => 
+            index === self.findIndex(t => t.id === task.id)
+          ).map((task, index) => (
             <React.Fragment key={task.id}>
               {/* Show drop indicator before this task if it matches the drop position */}
               {dropIndicator?.show && 
@@ -2092,16 +2089,16 @@ function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskCli
                 onTaskClick={onTaskClick}
               />
             </React.Fragment>
-              ))}
-              {/* Show drop indicator at the end if position is at the end */}
-              {dropIndicator?.show && 
-               dropIndicator.columnId === column.id && 
-               dropIndicator.position === uniqueTasks.length && (
-                <div className="drop-indicator active" />
-              )}
-            </SortableContext>
-          );
-        })()}
+          ))}
+          {/* Show drop indicator at the end if position is at the end */}
+          {dropIndicator?.show && 
+           dropIndicator.columnId === column.id && 
+           dropIndicator.position === tasks.filter((task, index, self) => 
+             index === self.findIndex(t => t.id === task.id)
+           ).length && (
+            <div className="drop-indicator active" />
+          )}
+        </SortableContext>
 
         {/* Add Task Button */}
         <Button 
