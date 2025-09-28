@@ -41,73 +41,143 @@ const teamTypes = [
   { value: 'other', label: 'Other', color: '#6B7280', description: 'General purpose team', icon: '👥' }
 ];
 
+// Simple icon mapping with safe fallbacks
+const iconMap: Record<string, any> = {
+  'Folder': Folder,
+  'Users': Users,
+  'Code': Code,
+  'FileText': FileText,
+  'TrendingUp': TrendingUp,
+  'Wrench': Wrench,
+  'Lightbulb': Lightbulb,
+  'Rocket': Rocket,
+  'Building': Building,
+  'Target': Target,
+  'BarChart3': BarChart3,
+  'Briefcase': Briefcase,
+  'Heart': Heart,
+  'Star': Star,
+  'Shield': Shield,
+  'Zap': Zap,
+  'Globe': Globe,
+  'Mail': Mail,
+  'Phone': Phone,
+  'Calendar': Calendar,
+  'Clock': Clock,
+  'Settings': Settings,
+  'User': User,
+  'Crown': Crown,
+  'Award': Award,
+  'Gift': Gift,
+  'Coffee': Coffee,
+  'Home': Home,
+  'Car': Car,
+  'Plane': Plane,
+  'Camera': Camera,
+  'Music': Music,
+  'Video': Video,
+  'Book': Book,
+  'File': File,
+  'Download': Download,
+  'Share': Share,
+  'Link': Link,
+  'Plus': Plus,
+  'Minus': Minus,
+  'Check': Check,
+  'X': X,
+  'ArrowRight': ArrowRight,
+  'ArrowLeft': ArrowLeft,
+  'ArrowUp': ArrowUp,
+  'ArrowDown': ArrowDown,
+  'Edit': Edit,
+  'Trash': Trash,
+  'Copy': Copy,
+  'Save': Save,
+  'Refresh': Refresh,
+  'RotateCcw': RotateCcw,
+  'Play': Play,
+  'Pause': Pause,
+  'Volume2': Volume2,
+  'VolumeX': VolumeX,
+  'Mic': Mic,
+  'Bell': Bell,
+  'Lock': Lock,
+  'Unlock': Unlock,
+  'Eye': Eye,
+  'EyeOff': EyeOff,
+  'Sun': Sun,
+  'Moon': Moon,
+  'Cloud': Cloud,
+  'CloudRain': CloudRain,
+};
+
 const spaceIcons = [
-  { value: 'Folder', label: 'Folder', icon: Folder },
-  { value: 'Users', label: 'Team', icon: Users },
-  { value: 'Code', label: 'Development', icon: Code },
-  { value: 'FileText', label: 'Content', icon: FileText },
-  { value: 'TrendingUp', label: 'Marketing', icon: TrendingUp },
-  { value: 'Wrench', label: 'Engineering', icon: Wrench },
-  { value: 'Lightbulb', label: 'Ideas', icon: Lightbulb },
-  { value: 'Rocket', label: 'Projects', icon: Rocket },
-  { value: 'Building', label: 'Business', icon: Building },
-  { value: 'Target', label: 'Goals', icon: Target },
-  { value: 'BarChart3', label: 'Analytics', icon: BarChart3 },
-  { value: 'Briefcase', label: 'Work', icon: Briefcase },
-  { value: 'Heart', label: 'Heart', icon: Heart },
-  { value: 'Star', label: 'Star', icon: Star },
-  { value: 'Shield', label: 'Security', icon: Shield },
-  { value: 'Zap', label: 'Energy', icon: Zap },
-  { value: 'Globe', label: 'Global', icon: Globe },
-  { value: 'Mail', label: 'Email', icon: Mail },
-  { value: 'Phone', label: 'Phone', icon: Phone },
-  { value: 'Calendar', label: 'Calendar', icon: Calendar },
-  { value: 'Clock', label: 'Time', icon: Clock },
-  { value: 'Settings', label: 'Settings', icon: Settings },
-  { value: 'User', label: 'User', icon: User },
-  { value: 'Crown', label: 'Premium', icon: Crown },
-  { value: 'Award', label: 'Award', icon: Award },
-  { value: 'Gift', label: 'Gift', icon: Gift },
-  { value: 'Coffee', label: 'Coffee', icon: Coffee },
-  { value: 'Home', label: 'Home', icon: Home },
-  { value: 'Car', label: 'Transport', icon: Car },
-  { value: 'Plane', label: 'Travel', icon: Plane },
-  { value: 'Camera', label: 'Camera', icon: Camera },
-  { value: 'Music', label: 'Music', icon: Music },
-  { value: 'Video', label: 'Video', icon: Video },
-  { value: 'Book', label: 'Book', icon: Book },
-  { value: 'File', label: 'File', icon: File },
-  { value: 'Download', label: 'Download', icon: Download },
-  { value: 'Share', label: 'Share', icon: Share },
-  { value: 'Link', label: 'Link', icon: Link },
-  { value: 'Plus', label: 'Add', icon: Plus },
-  { value: 'Minus', label: 'Remove', icon: Minus },
-  { value: 'Check', label: 'Check', icon: Check },
-  { value: 'X', label: 'Close', icon: X },
-  { value: 'ArrowRight', label: 'Right Arrow', icon: ArrowRight },
-  { value: 'ArrowLeft', label: 'Left Arrow', icon: ArrowLeft },
-  { value: 'ArrowUp', label: 'Up Arrow', icon: ArrowUp },
-  { value: 'ArrowDown', label: 'Down Arrow', icon: ArrowDown },
-  { value: 'Edit', label: 'Edit', icon: Edit },
-  { value: 'Trash', label: 'Delete', icon: Trash },
-  { value: 'Copy', label: 'Copy', icon: Copy },
-  { value: 'Save', label: 'Save', icon: Save },
-  { value: 'Refresh', label: 'Refresh', icon: Refresh },
-  { value: 'RotateCcw', label: 'Undo', icon: RotateCcw },
-  { value: 'Play', label: 'Play', icon: Play },
-  { value: 'Pause', label: 'Pause', icon: Pause },
-  { value: 'Volume2', label: 'Volume', icon: Volume2 },
-  { value: 'VolumeX', label: 'Mute', icon: VolumeX },
-  { value: 'Mic', label: 'Microphone', icon: Mic },
-  { value: 'Bell', label: 'Notification', icon: Bell },
-  { value: 'Lock', label: 'Lock', icon: Lock },
-  { value: 'Unlock', label: 'Unlock', icon: Unlock },
-  { value: 'Eye', label: 'View', icon: Eye },
-  { value: 'EyeOff', label: 'Hide', icon: EyeOff },
-  { value: 'Sun', label: 'Sun', icon: Sun },
-  { value: 'Moon', label: 'Moon', icon: Moon },
-  { value: 'Cloud', label: 'Cloud', icon: Cloud },
-  { value: 'CloudRain', label: 'Rain', icon: CloudRain },
+  { value: 'Folder', label: 'Folder' },
+  { value: 'Users', label: 'Team' },
+  { value: 'Code', label: 'Development' },
+  { value: 'FileText', label: 'Content' },
+  { value: 'TrendingUp', label: 'Marketing' },
+  { value: 'Wrench', label: 'Engineering' },
+  { value: 'Lightbulb', label: 'Ideas' },
+  { value: 'Rocket', label: 'Projects' },
+  { value: 'Building', label: 'Business' },
+  { value: 'Target', label: 'Goals' },
+  { value: 'BarChart3', label: 'Analytics' },
+  { value: 'Briefcase', label: 'Work' },
+  { value: 'Heart', label: 'Heart' },
+  { value: 'Star', label: 'Star' },
+  { value: 'Shield', label: 'Security' },
+  { value: 'Zap', label: 'Energy' },
+  { value: 'Globe', label: 'Global' },
+  { value: 'Mail', label: 'Email' },
+  { value: 'Phone', label: 'Phone' },
+  { value: 'Calendar', label: 'Calendar' },
+  { value: 'Clock', label: 'Time' },
+  { value: 'Settings', label: 'Settings' },
+  { value: 'User', label: 'User' },
+  { value: 'Crown', label: 'Premium' },
+  { value: 'Award', label: 'Award' },
+  { value: 'Gift', label: 'Gift' },
+  { value: 'Coffee', label: 'Coffee' },
+  { value: 'Home', label: 'Home' },
+  { value: 'Car', label: 'Transport' },
+  { value: 'Plane', label: 'Travel' },
+  { value: 'Camera', label: 'Camera' },
+  { value: 'Music', label: 'Music' },
+  { value: 'Video', label: 'Video' },
+  { value: 'Book', label: 'Book' },
+  { value: 'File', label: 'File' },
+  { value: 'Download', label: 'Download' },
+  { value: 'Share', label: 'Share' },
+  { value: 'Link', label: 'Link' },
+  { value: 'Plus', label: 'Add' },
+  { value: 'Minus', label: 'Remove' },
+  { value: 'Check', label: 'Check' },
+  { value: 'X', label: 'Close' },
+  { value: 'ArrowRight', label: 'Right Arrow' },
+  { value: 'ArrowLeft', label: 'Left Arrow' },
+  { value: 'ArrowUp', label: 'Up Arrow' },
+  { value: 'ArrowDown', label: 'Down Arrow' },
+  { value: 'Edit', label: 'Edit' },
+  { value: 'Trash', label: 'Delete' },
+  { value: 'Copy', label: 'Copy' },
+  { value: 'Save', label: 'Save' },
+  { value: 'Refresh', label: 'Refresh' },
+  { value: 'RotateCcw', label: 'Undo' },
+  { value: 'Play', label: 'Play' },
+  { value: 'Pause', label: 'Pause' },
+  { value: 'Volume2', label: 'Volume' },
+  { value: 'VolumeX', label: 'Mute' },
+  { value: 'Mic', label: 'Microphone' },
+  { value: 'Bell', label: 'Notification' },
+  { value: 'Lock', label: 'Lock' },
+  { value: 'Unlock', label: 'Unlock' },
+  { value: 'Eye', label: 'View' },
+  { value: 'EyeOff', label: 'Hide' },
+  { value: 'Sun', label: 'Sun' },
+  { value: 'Moon', label: 'Moon' },
+  { value: 'Cloud', label: 'Cloud' },
+  { value: 'CloudRain', label: 'Rain' },
 ];
 
 const predefinedColors = [
@@ -225,33 +295,24 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
                     disabled={isCreating}
                   >
                     {(() => {
-                      const iconData = spaceIcons.find(icon => icon.value === selectedIcon);
-                      const IconComponent = iconData?.icon || Folder;
+                      const IconComponent = iconMap[selectedIcon] || Folder;
                       return <IconComponent className="w-5 h-5" />;
                     })()}
                   </button>
                   
-                  {/* Icon Picker Dropdown */}
+                  {/* Simple Icon Picker */}
                   {showIconPicker && (
-                    <div className="absolute top-12 left-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[320px] max-w-[400px]">
-                      {/* Search Bar */}
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder="Search icons"
-                            value={iconSearchTerm}
-                            onChange={(e) => setIconSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="px-3 py-2 border border-blue-500 text-blue-500 rounded-md text-sm hover:bg-blue-50 transition-colors"
-                        >
-                          <Upload className="w-4 h-4" />
-                        </button>
+                    <div className="absolute top-12 left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-80">
+                      {/* Search Input */}
+                      <div className="relative mb-4">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search icons..."
+                          value={iconSearchTerm}
+                          onChange={(e) => setIconSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                       </div>
                       
                       {/* Icon Grid */}
@@ -261,7 +322,7 @@ export function TeamCreationModal({ isOpen, onClose, onCreateTeam }: TeamCreatio
                             icon.label.toLowerCase().includes(iconSearchTerm.toLowerCase())
                           )
                           .map((icon) => {
-                            const IconComponent = icon.icon;
+                            const IconComponent = iconMap[icon.value] || Folder;
                             return (
                               <button
                                 key={icon.value}
