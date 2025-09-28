@@ -21,6 +21,8 @@ function TeamsPageContent() {
     name: string;
     type: 'design' | 'content' | 'development' | 'marketing' | 'other';
     color?: string;
+    description?: string;
+    isPrivate?: boolean;
   }) => {
     await createTeam(teamData);
   };
