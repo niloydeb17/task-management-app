@@ -1,6 +1,5 @@
 'use client';
 
-import { use } from 'react';
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
