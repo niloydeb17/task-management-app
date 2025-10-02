@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ik.imagekit.io',
+        port: '',
+        pathname: '/**',
+      },
+    ],
+  },
   experimental: {
     // Enable experimental features that might help with build issues
     optimizePackageImports: ['lucide-react', '@radix-ui/react-avatar'],
