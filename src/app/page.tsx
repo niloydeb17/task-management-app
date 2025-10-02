@@ -26,7 +26,7 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <SignedOut>
-              <SignUpButton mode="modal">
+              <SignUpButton mode="redirect">
                 <Button size="lg" className="text-lg px-8 py-6">
                   Start Free Trial
                   <ArrowRight className="ml-2 w-5 h-5" />
@@ -145,7 +145,7 @@ export default function Home() {
             Join teams who are already moving faster with TaskFlow. Start your free trial today.
           </p>
           <SignedOut>
-            <SignUpButton mode="modal">
+            <SignUpButton mode="redirect">
               <Button size="lg" variant="secondary" className="text-lg px-8 py-6">
                 Get Started for Free
                 <ArrowRight className="ml-2 w-5 h-5" />
