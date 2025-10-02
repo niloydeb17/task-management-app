@@ -123,7 +123,7 @@ export function SectionCreationModal({
         <DialogHeader>
           <DialogTitle>Add New Section</DialogTitle>
           <DialogDescription>
-            Create a new status column for your team's workflow.
+            Create a new status column for your team&apos;s workflow.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>

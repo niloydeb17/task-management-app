@@ -27,7 +27,7 @@ export function Navigation({ user }: NavigationProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/", label: "Home", icon: Home },
+    { href: "/dashboard/home", label: "Home", icon: Home },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/kanban", label: "Kanban", icon: Columns3 },
     { href: "/teams", label: "Teams", icon: Users },

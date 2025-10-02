@@ -1,18 +1,39 @@
 'use client';
 
+import { useUser } from "@clerk/nextjs";
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useAuth } from "@/components/AuthProvider";
 
-function DashboardContent() {
-  const { user } = useAuth();
+export default function Dashboard() {
+  const { user, isLoaded } = useUser();
+
+  if (!isLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="mt-2 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Please sign in to access the dashboard</h1>
+          <p className="mt-2 text-gray-600">You need to be authenticated to view this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   const userData = {
-    name: user?.name || "User",
-    email: user?.email || "",
-    teamId: user?.teamId,
-    role: user?.role || "member"
+    name: user.fullName || user.firstName || "User",
+    email: user.primaryEmailAddress?.emailAddress || "user@example.com",
+    teamId: "default-team",
+    role: "member"
   };
 
   return (
@@ -25,13 +46,5 @@ function DashboardContent() {
         <TodoistKanban showLoading={false} />
       </div>
     </div>
-  );
-}
-
-export default function Dashboard() {
-  return (
-    <ProtectedRoute>
-      <DashboardContent />
-    </ProtectedRoute>
   );
 }

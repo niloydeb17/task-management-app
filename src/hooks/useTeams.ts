@@ -287,13 +287,14 @@ export function useTeams() {
           } else if (payload.eventType === 'INSERT') {
             // Handle new team creation - check if team already exists
             setTeams(prev => {
-              const teamExists = prev.some(team => team.id === payload.new.id);
+              const newTeam = payload.new as Team;
+              const teamExists = prev.some(team => team.id === newTeam.id);
               if (teamExists) {
-                console.log('Team already exists, skipping insert:', payload.new.id);
+                console.log('Team already exists, skipping insert:', newTeam.id);
                 return prev;
               }
               
-              const newTeams = [...prev, payload.new];
+              const newTeams = [...prev, newTeam];
               return newTeams.sort((a, b) => (a.position || 0) - (b.position || 0));
             });
           } else if (payload.eventType === 'DELETE') {

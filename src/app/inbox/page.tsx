@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { TodoistSidebar } from "@/components/TodoistSidebar";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -38,7 +36,6 @@ interface TaskActivity {
 }
 
 export default function InboxPage() {
-  const { user } = useAuth();
   const [activities, setActivities] = useState<TaskActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'inbox' | 'important' | 'other' | 'snoozed' | 'cleared'>('inbox');
@@ -56,10 +53,10 @@ export default function InboxPage() {
   };
 
   const userData = {
-    name: user?.name || "User",
-    email: user?.email || "",
-    teamId: user?.teamId || "",
-    role: user?.role || "member"
+    name: "User",
+    email: "user@example.com",
+    teamId: "default-team",
+    role: "member"
   };
 
   // Mock data for now - in real implementation, this would come from database
@@ -286,28 +283,25 @@ export default function InboxPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <div className="h-screen bg-gray-50">
-          {/* Fixed Sidebar */}
-          <TodoistSidebar user={userData} />
-          
-          {/* Main Content */}
-          <div className="ml-64 h-screen flex items-center justify-center">
-            <div className="text-gray-500">Loading inbox...</div>
-          </div>
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
-  return (
-    <ProtectedRoute>
       <div className="h-screen bg-gray-50">
         {/* Fixed Sidebar */}
         <TodoistSidebar user={userData} />
         
         {/* Main Content */}
-        <div className="ml-64 h-screen overflow-y-auto bg-white">
+        <div className="ml-64 h-screen flex items-center justify-center">
+          <div className="text-gray-500">Loading inbox...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen bg-gray-50">
+      {/* Fixed Sidebar */}
+      <TodoistSidebar user={userData} />
+      
+      {/* Main Content */}
+      <div className="ml-64 h-screen overflow-y-auto bg-white">
           {/* Top Navigation Tabs */}
           <div className="bg-white border-b border-gray-200">
             <div className="flex items-center justify-between px-6 py-4">
@@ -521,6 +515,5 @@ export default function InboxPage() {
           </div>
         </div>
       </div>
-    </ProtectedRoute>
   );
 }

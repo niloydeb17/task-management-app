@@ -16,7 +16,7 @@ import {
   Gift, Coffee, Home, Car, Plane, Camera, Music, Video, 
   Book, File, Download, Share, Link, Plus, Minus, Check, 
   X, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Edit, Trash, 
-  Copy, Save, Refresh, RotateCcw, Play, Pause, Volume2, 
+  Copy, Save, RefreshCw, RotateCcw, Play, Pause, Volume2, 
   VolumeX, Mic, Bell, Lock, Unlock, Eye, EyeOff, Sun, 
   Moon, Cloud, CloudRain
 } from 'lucide-react';
@@ -94,7 +94,7 @@ const iconMap: Record<string, any> = {
   'Trash': Trash,
   'Copy': Copy,
   'Save': Save,
-  'Refresh': Refresh,
+  'Refresh': RefreshCw,
   'RotateCcw': RotateCcw,
   'Play': Play,
   'Pause': Pause,
@@ -163,7 +163,7 @@ const spaceIcons = [
   { value: 'Trash', label: 'Delete' },
   { value: 'Copy', label: 'Copy' },
   { value: 'Save', label: 'Save' },
-  { value: 'Refresh', label: 'Refresh' },
+  { value: 'RefreshCw', label: 'Refresh' },
   { value: 'RotateCcw', label: 'Undo' },
   { value: 'Play', label: 'Play' },
   { value: 'Pause', label: 'Pause' },

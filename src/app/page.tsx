@@ -2,45 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Users, Zap, BarChart3, Shield, Sparkles } from "lucide-react";
+import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import Link from "next/link";
-import { AuthTest } from "@/components/AuthTest";
-import { GoogleAuthTest } from "@/components/GoogleAuthTest";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <img 
-              src="/logo-m.svg" 
-              alt="Logo" 
-              className="h-8 w-8"
-            />
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              TaskFlow
-            </span>
-          </div>
-          <nav className="hidden md:flex items-center space-x-6">
-            <Link href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Features
-            </Link>
-            <Link href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Pricing
-            </Link>
-            <Link href="#about" className="text-gray-600 hover:text-gray-900 transition-colors">
-              About
-            </Link>
-          </nav>
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost">Sign In</Button>
-            <Link href="/dashboard">
-              <Button>Get Started</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 text-center">
@@ -58,12 +25,22 @@ export default function Home() {
             and motivation features that keep your teams moving faster than ever.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/dashboard">
-              <Button size="lg" className="text-lg px-8 py-6">
-                Start Free Trial
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </Link>
+            <SignedOut>
+              <SignUpButton mode="modal">
+                <Button size="lg" className="text-lg px-8 py-6">
+                  Start Free Trial
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <Link href="/dashboard">
+                <Button size="lg" className="text-lg px-8 py-6">
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </Link>
+            </SignedIn>
             <Button variant="outline" size="lg" className="text-lg px-8 py-6">
               Watch Demo
             </Button>
@@ -71,13 +48,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Auth Test Section - Temporary for testing */}
-      <section className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto space-y-6">
-          <AuthTest />
-          <GoogleAuthTest />
-        </div>
-      </section>
 
       {/* Features Section */}
       <section id="features" className="py-20 bg-white">
@@ -157,7 +127,7 @@ export default function Home() {
                 </div>
                 <CardTitle>Simple & Intuitive</CardTitle>
                 <CardDescription>
-                  Clean, modern interface that's easy to learn and use, without the complexity of other tools.
+                  Clean, modern interface that&apos;s easy to learn and use, without the complexity of other tools.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -169,17 +139,27 @@ export default function Home() {
       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-4xl font-bold text-white mb-4">
-            Ready to Transform Your Team's Workflow?
+            Ready to Transform Your Team&apos;s Workflow?
           </h2>
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Join teams who are already moving faster with TaskFlow. Start your free trial today.
           </p>
-          <Link href="/dashboard">
-            <Button size="lg" variant="secondary" className="text-lg px-8 py-6">
-              Get Started for Free
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          </Link>
+          <SignedOut>
+            <SignUpButton mode="modal">
+              <Button size="lg" variant="secondary" className="text-lg px-8 py-6">
+                Get Started for Free
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </SignUpButton>
+          </SignedOut>
+          <SignedIn>
+            <Link href="/dashboard">
+              <Button size="lg" variant="secondary" className="text-lg px-8 py-6">
+                Go to Dashboard
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </Link>
+          </SignedIn>
         </div>
       </section>
 

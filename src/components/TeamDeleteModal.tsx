@@ -63,7 +63,7 @@ export function TeamDeleteModal({ isOpen, onClose, onDeleteTeam, team }: TeamDel
             <div>
               <DialogTitle>Delete Team</DialogTitle>
               <DialogDescription className="mt-1">
-                Are you sure you want to delete "{team?.name}"? This action cannot be undone.
+                Are you sure you want to delete &quot;{team?.name}&quot;? This action cannot be undone.
               </DialogDescription>
             </div>
           </div>

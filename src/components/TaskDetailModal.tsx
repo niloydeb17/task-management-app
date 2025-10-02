@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   Home,
   RefreshCw,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from "lucide-react";
 
 interface Task {
@@ -52,15 +53,14 @@ interface TaskDetailModalProps {
   task: Task | null;
   onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
   onHandoff?: (taskId: string, handoffData: any) => Promise<void>;
-  teams?: Array<{ id: string; name: string; type: string; color: string }>;
-  currentTeam?: { id: string; name: string; type: string; color: string };
+  onDelete?: (taskId: string, taskTitle: string) => Promise<void>;
+  teams?: Array<any>;
+  currentTeam?: any;
 }
 
-export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff, teams, currentTeam }: TaskDetailModalProps) {
+export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff, onDelete, teams, currentTeam }: TaskDetailModalProps) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [comment, setComment] = useState("");
-  const [subTasks, setSubTasks] = useState<string[]>([]);
-  const [newSubTask, setNewSubTask] = useState("");
   
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -82,7 +82,7 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
         description: task.description || "",
         priority: task.priority,
         tags: [...task.tags],
-        due_date: task.due_date || null,
+        due_date: task.due_date || undefined,
       });
       setIsCompleted(false);
       setHasChanges(false);
@@ -120,6 +120,24 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
     return `${Math.abs(diffDays)} days ago`;
   };
 
+  const handleDelete = async () => {
+    console.log('Delete handler called with task:', task);
+    console.log('Task title:', task?.title);
+    console.log('Task ID:', task?.id);
+    if (onDelete && task) {
+      try {
+        console.log('Calling onDelete with task ID:', task.id, 'and title:', task.title);
+        // Call the existing delete handler which already has its own confirmation
+        await onDelete(task.id, task.title);
+        onClose();
+      } catch (error) {
+        console.error('Failed to delete task:', error);
+      }
+    } else {
+      console.error('Cannot delete: onDelete or task is missing', { onDelete: !!onDelete, task });
+    }
+  };
+
   const priorityInfo = getPriorityInfo(editedTask.priority || task.priority);
 
   const handleSave = () => {
@@ -136,7 +154,7 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
       description: task.description || "",
       priority: task.priority,
       tags: [...task.tags],
-      due_date: task.due_date || null,
+      due_date: task.due_date || undefined,
     });
     setIsEditing(false);
     setHasChanges(false);
@@ -168,9 +186,9 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
   const saveInlineEdit = () => {
     if (editingField && tempValue !== (editedTask[editingField as keyof Task] || task[editingField as keyof Task])) {
       // Handle empty due_date specially
-      let valueToSave = tempValue;
+      let valueToSave: string | undefined = tempValue;
       if (editingField === 'due_date' && tempValue === '') {
-        valueToSave = null;
+        valueToSave = undefined;
       }
       handleFieldChange(editingField as keyof Task, valueToSave);
     }
@@ -258,6 +276,20 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
                         Handoff
                       </Button>
                     )}
+                    {onDelete && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          console.log('Delete button clicked, task:', task);
+                          handleDelete();
+                        }}
+                        className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
@@ -305,7 +337,7 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
                 <div className="flex items-center space-x-4 mb-6">
                   <Checkbox
                     checked={isCompleted}
-                    onCheckedChange={setIsCompleted}
+                    onCheckedChange={(checked) => setIsCompleted(checked === true)}
                     className="h-6 w-6 border-2 border-blue-500 data-[state=checked]:bg-blue-500 flex-shrink-0"
                   />
                   {isEditing || editingField === 'title' ? (
@@ -367,19 +399,6 @@ export function TaskDetailModal({ isOpen, onClose, task, onTaskUpdate, onHandoff
                   )}
                 </div>
 
-                {/* Sub-tasks */}
-                <div className="mb-6">
-                  <div className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 cursor-pointer">
-                    <Plus className="w-4 h-4" />
-                    <span className="text-sm">Add sub-task</span>
-                  </div>
-                  {subTasks.map((subTask, index) => (
-                    <div key={index} className="flex items-center space-x-2 mt-2">
-                      <Checkbox className="h-4 w-4" />
-                      <span className="text-sm text-gray-700">{subTask}</span>
-                    </div>
-                  ))}
-                </div>
 
                 {/* Comments Section */}
                 <div className="border-t border-gray-200 pt-6">

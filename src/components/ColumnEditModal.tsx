@@ -285,7 +285,7 @@ export function ColumnEditModal({
                 Delete Column
               </h3>
               <p className="text-gray-600 mb-4">
-                Are you sure you want to delete "{column.name}"? This will also delete all tasks in this column. This action cannot be undone.
+                Are you sure you want to delete &quot;{column.name}&quot;? This will also delete all tasks in this column. This action cannot be undone.
               </p>
             </div>
             <DialogFooter className="flex justify-center gap-2">

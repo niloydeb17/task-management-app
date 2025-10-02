@@ -9,13 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Users, Calendar, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useAuth } from "@/components/AuthProvider";
-
 function TeamsPageContent() {
   const { teams, loading, createTeam } = useTeams();
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-  const { user } = useAuth();
 
   const handleCreateTeam = async (teamData: {
     name: string;
@@ -28,10 +24,10 @@ function TeamsPageContent() {
   };
 
   const userData = {
-    name: user?.name || "User",
-    email: user?.email || "",
-    teamId: user?.teamId,
-    role: user?.role || "member"
+    name: "User",
+    email: "user@example.com",
+    teamId: "default-team",
+    role: "member"
   };
 
   return (
@@ -131,9 +127,5 @@ function TeamsPageContent() {
 }
 
 export default function TeamsPage() {
-  return (
-    <ProtectedRoute>
-      <TeamsPageContent />
-    </ProtectedRoute>
-  );
+  return <TeamsPageContent />;
 }

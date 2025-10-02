@@ -24,7 +24,9 @@ import {
   Rocket,
   ChevronDown
 } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import { supabase } from "@/lib/supabase";
+import { ClerkAvatar } from "@/components/ClerkAvatar";
 
 // Helper function to get cookies
 const getCookie = (name: string): string => {
@@ -43,6 +45,7 @@ interface TaskCreationModalProps {
 }
 
 export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: TaskCreationModalProps) {
+  const { user } = useUser();
   const [taskName, setTaskName] = useState("");
   const [addDescription, setAddDescription] = useState(false);
   const [description, setDescription] = useState("");
@@ -61,38 +64,122 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
     }
   }, [isOpen]);
 
+  const ensureCurrentUserExists = async () => {
+    if (!user) return;
+    
+    try {
+      // Check if user already exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing user:', checkError);
+        return;
+      }
+      
+      // If user doesn't exist, create them
+      if (!existingUser) {
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            name: user.fullName || user.firstName || 'User',
+            email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+            avatar: user.imageUrl || null,
+            created_at: new Date().toISOString()
+          });
+        
+        if (insertError) {
+          console.error('Error creating user:', insertError);
+        } else {
+          console.log('User created in database with real-time Clerk data:', {
+            id: user.id,
+            name: user.fullName || user.firstName,
+            email: user.primaryEmailAddress?.emailAddress,
+            avatar: user.imageUrl
+          });
+        }
+      } else {
+        // Update existing user with latest Clerk data
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            name: user.fullName || user.firstName || 'User',
+            email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+            avatar: user.imageUrl || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+        
+        if (updateError) {
+          console.error('Error updating user:', updateError);
+        } else {
+          console.log('User updated with latest Clerk data:', user.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error in ensureCurrentUserExists:', error);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
-      // First, ensure current user exists in users table
-      await ensureCurrentUserExists();
+      // First, ensure current user exists in database
+      if (user) {
+        await ensureCurrentUserExists();
+      }
       
-      // Then fetch all users
-      const { data, error } = await supabase
+      // Fetch all users from database
+      const { data: dbUsers, error } = await supabase
         .from('users')
         .select('id, name, email, avatar')
         .order('name');
       
       if (error) {
-        console.error('Error fetching users:', error);
-        // Fallback: if database fetch fails, try to get current user from cookies
-        const fallbackUsers = getFallbackUsers();
-        setUsers(fallbackUsers);
+        console.error('Error fetching users from database:', error);
+        // Fallback to current user only
+        if (user) {
+          const currentUser = [{
+            id: user.id,
+            name: user.fullName || user.firstName || 'User',
+            email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+            avatar: user.imageUrl || null
+          }];
+          setUsers(currentUser);
+        } else {
+          setUsers([]);
+        }
         return;
       }
       
-      // If no users found, try fallback
-      if (!data || data.length === 0) {
-        const fallbackUsers = getFallbackUsers();
-        setUsers(fallbackUsers);
-        return;
-      }
+      // Remove duplicates based on email (in case there are old entries)
+      const uniqueUsers = dbUsers?.reduce((acc: any[], current: any) => {
+        const existingUser = acc.find(user => user.email === current.email);
+        if (!existingUser) {
+          acc.push(current);
+        }
+        return acc;
+      }, []) || [];
       
-      setUsers(data || []);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      // Fallback: get current user from cookies
-      const fallbackUsers = getFallbackUsers();
-      setUsers(fallbackUsers);
+      console.log('Fetched unique users from database:', uniqueUsers);
+      setUsers(uniqueUsers);
+    } catch (error) {
+      console.error('Error in fetchUsers:', error);
+      // Fallback to current user only
+      if (user) {
+        const currentUser = [{
+          id: user.id,
+          name: user.fullName || user.firstName || 'User',
+          email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+          avatar: user.imageUrl || null
+        }];
+        setUsers(currentUser);
+      } else {
+        setUsers([]);
+      }
     }
   };
 
@@ -112,62 +199,6 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
     }];
   };
 
-  const ensureCurrentUserExists = async () => {
-    try {
-      // Get current user from cookies (Google OAuth)
-      const name = getCookie('user_name') || '';
-      const email = getCookie('user_email') || '';
-      
-      console.log('Checking user from cookies:', { name, email });
-      
-      if (!name || !email) {
-        console.log('No user data found in cookies');
-        return;
-      }
-      
-      // Check if user already exists
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-      
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Error checking existing user:', checkError);
-        return;
-      }
-      
-      if (existingUser) {
-        console.log('User already exists:', existingUser);
-        return; // User already exists
-      }
-      
-      // Generate UUID for user
-      const userId = crypto.randomUUID();
-      console.log('Creating user profile with ID:', userId);
-      
-      // Create user profile
-      const { data, error } = await supabase
-        .from('users')
-        .insert({
-          id: userId,
-          email,
-          name,
-          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff6b35&color=ffffff&size=128`,
-          role: 'member'
-        })
-        .select();
-      
-      if (error) {
-        console.error('Error creating user profile:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      } else {
-        console.log('User profile created successfully:', data);
-      }
-    } catch (err) {
-      console.error('Error ensuring current user exists:', err);
-    }
-  };
 
   const handleCreateTask = () => {
     const newTask = {
@@ -176,6 +207,7 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
       status,
       assignee: selectedAssignee?.name || assignee,
       assignee_id: selectedAssignee?.id || null,
+      assignee_avatar: selectedAssignee?.avatar || null,
       dueDate,
       priority: priority || 'medium',
       tags,
@@ -357,7 +389,13 @@ export function TaskCreationModal({ isOpen, onClose, onTaskCreate, columnId }: T
                                     }`}
                                     onClick={() => setSelectedAssignee(user)}
                                   >
-                                    <User className="w-4 h-4 mr-2" />
+                                    <ClerkAvatar
+                                      assigneeId={user.id}
+                                      assigneeName={user.name}
+                                      assigneeAvatar={user.avatar}
+                                      className="w-4 h-4 mr-2"
+                                      size="sm"
+                                    />
                                     {user.name}
                                     {isCurrentUser && <span className="ml-auto text-xs">(You)</span>}
                                   </Button>

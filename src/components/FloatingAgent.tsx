@@ -20,20 +20,9 @@ import { Conversation, ConversationContent, ConversationEmptyState } from './ai-
 import { Message, MessageContent } from './ai-elements/message';
 import { TaskList } from './TaskList';
 import { parseAIResponse } from '@/lib/task-parser';
+import { Task } from '@/types';
 
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: string;
-  priority: 'low' | 'medium' | 'high';
-  team: string;
-  assignee?: string;
-  dueDate?: string;
-  teamId?: string;
-  columnId?: string;
-}
 
 interface ChatMessage {
   id: string;
@@ -79,9 +68,8 @@ export const FloatingAgent: React.FC = () => {
     
     console.log('🔍 Starting precise task navigation for:', {
       title: task.title,
-      team: task.team,
-      status: task.status,
       teamId: task.teamId,
+      status: task.status.name,
       columnId: task.columnId,
       fullTask: task
     });
@@ -253,11 +241,11 @@ export const FloatingAgent: React.FC = () => {
           
           // Check if this column matches our task's status/team
           const isRelevantColumn = !task.status || !columnName || 
-            columnName.toLowerCase().includes(task.status.toLowerCase()) ||
-            task.status.toLowerCase().includes(columnName.toLowerCase());
+            columnName.toLowerCase().includes(task.status.name.toLowerCase()) ||
+            task.status.name.toLowerCase().includes(columnName.toLowerCase());
           
           if (!isRelevantColumn) {
-            console.log(`⏭️ Skipping column ${columnName} - doesn't match status ${task.status}`);
+            console.log(`⏭️ Skipping column ${columnName} - doesn't match status ${task.status.name}`);
             continue;
           }
           
@@ -517,12 +505,8 @@ export const FloatingAgent: React.FC = () => {
                               {/* Message text */}
                               <div>{message.content}</div>
                               
-                              {/* Task cards if available */}
                               {message.hasTasks && message.tasks && message.tasks.length > 0 && (
                                 <div className="mt-4 w-full">
-                                  {console.log('🎯 Rendering TaskList with tasks:', message.tasks)}
-                                  {console.log('🎯 Task count:', message.tasks.length)}
-                                  {console.log('🎯 First task:', message.tasks[0])}
                                   <TaskList
                                     tasks={message.tasks}
                                     title="Found Tasks"
@@ -535,11 +519,6 @@ export const FloatingAgent: React.FC = () => {
                                   />
                                 </div>
                               )}
-                              {console.log('🔍 Message task check:', {
-                                hasTasks: message.hasTasks,
-                                tasks: message.tasks,
-                                tasksLength: message.tasks?.length
-                              })}
                             </div>
                           </MessageContent>
                         </Message>

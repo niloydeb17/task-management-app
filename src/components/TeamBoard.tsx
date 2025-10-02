@@ -38,7 +38,20 @@ export function TeamBoard({
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
 
   const getTasksForColumn = (columnId: string) => {
-    return tasks.filter(task => task.columnId === columnId);
+    const columnTasks = tasks.filter(task => task.columnId === columnId);
+    
+    // Sort tasks to prioritize handed-off tasks at the top
+    return columnTasks.sort((a, b) => {
+      const aIsHandover = a.handoffStatus === 'handed_off' || a.handoffStatus === 'accepted' || a.sourceTeamId;
+      const bIsHandover = b.handoffStatus === 'handed_off' || b.handoffStatus === 'accepted' || b.sourceTeamId;
+      
+      // Handed-off tasks come first
+      if (aIsHandover && !bIsHandover) return -1;
+      if (!aIsHandover && bIsHandover) return 1;
+      
+      // Within each group, sort by creation date (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   };
 
   const isBacklogColumn = (column: Column) => {
@@ -88,7 +101,7 @@ export function TeamBoard({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{teamName} Board</h2>
-          <p className="text-gray-600">Manage your team's tasks and workflow</p>
+          <p className="text-gray-600">Manage your team&apos;s tasks and workflow</p>
         </div>
         <Button onClick={() => onTaskCreate?.({
           title: 'New Task',
@@ -100,7 +113,9 @@ export function TeamBoard({
           tags: [],
           attachments: [],
           comments: [],
-          handoffHistory: []
+          handoffHistory: [],
+          handoffStatus: 'none',
+          handoffRequirements: []
         })}>
           <Plus className="w-4 h-4 mr-2" />
           Add Task
@@ -175,9 +190,8 @@ export function TeamBoard({
                               {task.priority}
                             </Badge>
                             {isHandoff && (
-                              <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
-                                <ArrowRight className="w-3 h-3 mr-1" />
-                                Handoff
+                              <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700 border-orange-200">
+                                Handover
                               </Badge>
                             )}
                           </div>

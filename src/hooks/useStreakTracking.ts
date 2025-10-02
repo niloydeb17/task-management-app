@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/components/AuthProvider';
 
 interface StreakData {
   currentStreak: number;
@@ -11,7 +10,6 @@ interface StreakData {
 }
 
 export const useStreakTracking = () => {
-  const { user } = useAuth();
   const [streakData, setStreakData] = useState<StreakData>({
     currentStreak: 0,
     completedTasksToday: 0,
@@ -36,25 +34,17 @@ export const useStreakTracking = () => {
     return dateString === yesterday.toISOString().split('T')[0];
   };
 
-  // Load streak data from database
+  // Load streak data from database (simplified without authentication)
   const loadStreakData = useCallback(async () => {
-    if (!user?.id) {
-      console.log('No user ID available for streak tracking');
-      return;
-    }
-
-    console.log('Loading streak data for user:', user.id);
-
     try {
-      // First, get the user's UUID from the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', user.id) // user.id is actually the email
-        .single();
+      // Get all tasks completed today
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('id, completed_at, updated_at, status')
+        .not('completed_at', 'is', null);
 
-      if (userError || !userData) {
-        console.log('User not found in database, skipping streak tracking');
+      if (tasksError) {
+        console.error('Error fetching tasks:', tasksError);
         setStreakData({
           currentStreak: 0,
           completedTasksToday: 0,
@@ -63,58 +53,15 @@ export const useStreakTracking = () => {
         return;
       }
 
-      const userUuid = userData.id;
-      console.log('Found user UUID:', userUuid);
-
-      // Get user's tasks that were completed today
-      const { data: allTasks, error: tasksError } = await supabase
-        .from('tasks')
-        .select('id, completed_at, updated_at, status, assignee_id')
-        .eq('assignee_id', userUuid);
-
-      if (tasksError) {
-        console.error('Error fetching tasks:', tasksError);
-        console.error('User ID:', user.id);
-        console.error('User object:', user);
-        
-        // If the error is due to no matching tasks, that's okay - just return 0
-        if (tasksError.code === 'PGRST116' || tasksError.message?.includes('No rows found')) {
-          console.log('No tasks found for user, setting completed tasks to 0');
-          setStreakData({
-            currentStreak: 0,
-            completedTasksToday: 0,
-            lastActivityDate: null
-          });
-          return;
-        }
-        return;
-      }
-
-      console.log('Fetched tasks:', allTasks?.length || 0);
-
-      // Count completed tasks (tasks with completed_at set to today)
+      // Count completed tasks today
       const completedTasksToday = allTasks?.filter(task => {
         if (!task.completed_at) return false;
         const completedDate = task.completed_at.split('T')[0];
         return isToday(completedDate);
       }).length || 0;
 
-      console.log('Completed tasks today:', completedTasksToday);
-
-      // If no tasks found, set default values and return
-      if (!allTasks || allTasks.length === 0) {
-        console.log('No tasks found for user, setting default streak data');
-        setStreakData({
-          currentStreak: 0,
-          completedTasksToday: 0,
-          lastActivityDate: null
-        });
-        return;
-      }
-
-      // Get or create streak record
-      const teamId = user.teamId || userUuid || 'default';
-      console.log('Using team ID:', teamId);
+      // Get or create default streak record
+      const teamId = 'default-team';
       
       const { data: streakRecord, error: streakError } = await supabase
         .from('team_streaks')
@@ -198,26 +145,20 @@ export const useStreakTracking = () => {
         lastActivityDate: null
       });
     }
-  }, [user?.id]);
+  }, []);
 
-  // Track task completion
+  // Track task completion (simplified without authentication)
   const trackTaskCompletion = useCallback(async (taskId: string, isCompleted: boolean) => {
-    if (!user?.id || !isCompleted) return;
+    if (!isCompleted) return;
 
     try {
-      // First, get the user's UUID from the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', user.id) // user.id is actually the email
-        .single();
-
-      if (userError || !userData) {
-        console.log('User not found in database, cannot track task completion');
+      console.log('🎯 Tracking task completion:', { taskId, isCompleted });
+      
+      // Check if supabase is available
+      if (!supabase) {
+        console.error('❌ Supabase client not available');
         return;
       }
-
-      const userUuid = userData.id;
 
       // Update task completion timestamp
       const { error } = await supabase
@@ -226,25 +167,36 @@ export const useStreakTracking = () => {
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('id', taskId)
-        .eq('assignee_id', userUuid);
+        .eq('id', taskId);
 
       if (error) {
-        console.error('Error updating task completion:', error);
+        console.error('Error updating task completion:', {
+          error,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          errorHint: error.hint,
+          errorCode: error.code,
+          taskId
+        });
         return;
       }
 
+      console.log('✅ Task completion tracked successfully:', { taskId });
+
       // Reload streak data after a short delay to avoid circular dependency
       setTimeout(() => {
-        if (user?.id) {
-          loadStreakData();
-        }
+        loadStreakData();
       }, 100);
 
     } catch (error) {
-      console.error('Error tracking task completion:', error);
+      console.error('Error tracking task completion:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        taskId
+      });
     }
-  }, [user?.id, loadStreakData]);
+  }, [loadStreakData]);
 
   // Close streak popup
   const closeStreakPopup = useCallback(() => {
@@ -253,11 +205,8 @@ export const useStreakTracking = () => {
 
   // Load initial data
   useEffect(() => {
-    // Only load streak data if user is available
-    if (user?.id) {
-      loadStreakData();
-    }
-  }, [loadStreakData, user?.id]);
+    loadStreakData();
+  }, [loadStreakData]);
 
   // Test function to manually trigger popup (for development)
   const testStreakPopup = useCallback(() => {
@@ -269,48 +218,31 @@ export const useStreakTracking = () => {
     setShowStreakPopup(true);
   }, []);
 
-  // Debug function to check database state
+  // Debug function to check database state (simplified)
   const debugDatabaseState = useCallback(async () => {
-    if (!user?.id) {
-      console.log('No user ID available');
-      return;
-    }
-
     try {
-      // Check if user exists by email
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, email, team_id')
-        .eq('email', user.id) // user.id is actually the email
-        .single();
-
-      console.log('User data:', userData);
-      console.log('User error:', userError);
-
-      if (userData) {
-        // Check tasks for this user using UUID
-        const { data: tasksData, error: tasksError } = await supabase
-          .from('tasks')
-          .select('id, title, assignee_id, completed_at')
-          .eq('assignee_id', userData.id);
-
-        console.log('Tasks data:', tasksData);
-        console.log('Tasks error:', tasksError);
-      }
-
       // Check all tasks (for debugging)
       const { data: allTasksData, error: allTasksError } = await supabase
         .from('tasks')
-        .select('id, title, assignee_id, completed_at')
+        .select('id, title, completed_at')
         .limit(5);
 
       console.log('All tasks sample:', allTasksData);
       console.log('All tasks error:', allTasksError);
 
+      // Check streak data
+      const { data: streakData, error: streakError } = await supabase
+        .from('team_streaks')
+        .select('*')
+        .eq('team_id', 'default-team');
+
+      console.log('Streak data:', streakData);
+      console.log('Streak error:', streakError);
+
     } catch (error) {
       console.error('Debug error:', error);
     }
-  }, [user?.id]);
+  }, []);
 
   return {
     streakData,
@@ -320,5 +252,5 @@ export const useStreakTracking = () => {
     loadStreakData,
     testStreakPopup, // For testing
     debugDatabaseState // For debugging
-  };
+  } as const;
 };

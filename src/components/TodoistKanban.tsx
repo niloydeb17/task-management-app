@@ -8,6 +8,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ClerkAvatar } from "@/components/ClerkAvatar";
 import { 
   Plus, 
   Calendar,
@@ -16,7 +17,11 @@ import {
   Share,
   Eye,
   Settings,
-  LogOut
+  LogOut,
+  ArrowRight,
+  Columns3,
+  BarChart4,
+  Table
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,15 +31,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth } from "@/components/AuthProvider";
-import { signOut } from "@/lib/auth-client";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useStreakTracking } from "@/hooks/useStreakTracking";
 import { StreakCelebrationPopup } from "@/components/StreakCelebrationPopup";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { Trash2, Edit } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import { TaskCreationModal } from "@/components/TaskCreationModal";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { SectionCreationModal } from "@/components/SectionCreationModal";
 import { ColumnEditModal } from "@/components/ColumnEditModal";
+import { CalendarView } from "@/components/CalendarView";
+import { GanttView } from "@/components/GanttView";
 import { HandoffService } from "@/lib/handoff";
 import { HandoffForm } from "@/types";
 import LoaderOne from "@/components/ui/loader-one";
@@ -55,6 +70,10 @@ interface Task {
     name: string;
     avatar?: string;
   };
+  assignee_id?: string;
+  assignee_avatar?: string;
+  handoff_status?: string;
+  source_team_id?: string;
 }
 
 interface Column {
@@ -70,7 +89,6 @@ interface TodoistKanbanProps {
 }
 
 export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps) {
-  const { user } = useAuth();
   const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = useStreakTracking();
   
   // Helper function to ensure unique tasks by ID
@@ -80,8 +98,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
     );
   };
   
-  // Debug user data
-  console.log('TodoistKanban user data:', user);
+  // Debug user data - removed as user is not available in this component
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
@@ -105,6 +122,16 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   } | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isAssigneeSheetOpen, setIsAssigneeSheetOpen] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
+  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([]);
+  const [currentView, setCurrentView] = useState<'kanban' | 'calendar' | 'gantt' | 'table'>('kanban');
+  const { user } = useUser();
+
+  // Fetch users on component mount
+  useEffect(() => {
+    fetchUsers();
+  }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -143,7 +170,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         }
         
         let teamData;
-        let columnsData;
+        let columnsData: any[] = [];
         let tasksData = [];
         
         // Use dummy data for testing teams or when no teams found
@@ -424,11 +451,9 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
               tags: ['Design', 'Complete', 'Handoff'],
               due_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
               created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-              team_id: teamId,
+              team_id: teamId || 'default-team',
               position: 0,
-              assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' },
-              handoff_status: 'handed_off',
-              source_team_id: 'dummy-team-id'
+              assignee: { name: 'Sam', avatar: '/placeholder-avatar.jpg' }
             });
             
             // Add some additional tasks for non-Design teams
@@ -473,17 +498,16 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             throw new Error('No board template found');
           }
           
-          // Get tasks from database with assignee information
+          // Get tasks from database
           const { data: dbTasksData, error: tasksError } = await supabase
             .from('tasks')
             .select(`
               id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
               handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
-              assignee_id,
-              users:assignee_id (id, name, email, avatar)
+              assignee, assignee_id, assignee_avatar
             `)
             .eq('team_id', teamData.id)
-            .order('position', { ascending: true });
+            .order('created_at', { ascending: false });
           
           if (tasksError) {
             console.error('Tasks error:', tasksError);
@@ -497,11 +521,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             teamId: teamData.id,
             statusInfo: dbTasksData?.map(task => ({ id: task.id, title: task.title, column_id: task.column_id, status: task.status }))
           });
-          console.log('Tasks with assignee info:', dbTasksData?.map(task => ({ 
+          console.log('Tasks loaded:', dbTasksData?.map(task => ({ 
             id: task.id, 
             title: task.title, 
-            assignee_id: task.assignee_id, 
-            assignee_user: task.users 
+            column_id: task.column_id,
+            status: task.status
           })));
           console.log('===================================');
           
@@ -530,8 +554,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         setCurrentTeam({
           id: teamData.id,
           name: teamData.name,
-          type: teamData.type || 'other',
-          color: teamData.color || '#3B82F6'
+          type: (teamData as any).type || 'other',
+          color: (teamData as any).color || '#3B82F6'
         });
         
         console.log('Columns data:', columnsData);
@@ -572,6 +596,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
     // Track processed events to avoid duplicates
     const processedEvents = new Set<string>();
     
+    console.log('🔌 Setting up real-time subscription for team:', currentTeam.id);
+    
     const channel = supabase
       .channel(`kanban-realtime-${currentTeam.id}`)
       .on(
@@ -579,15 +605,39 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         {
           event: '*',
           schema: 'public',
-          table: 'tasks',
-          filter: `team_id=eq.${currentTeam.id}`
+          table: 'tasks'
         },
         (payload) => {
-          const eventKey = `${payload.eventType}-${payload.new?.id || payload.old?.id}`;
+          const oldId = (payload.old as any)?.id;
+          const newId = (payload.new as any)?.id;
+          const eventKey = `${payload.eventType}-${newId || oldId || 'unknown'}`;
+          const newTeamId = (payload.new as any)?.team_id;
+          const oldTeamId = (payload.old as any)?.team_id;
+          const taskTeamId = newTeamId || oldTeamId;
+          
+          console.log('🔍 Real-time event received:', {
+            eventType: payload.eventType,
+            eventKey,
+            isDuplicate: processedEvents.has(eventKey),
+            taskId: newId || oldId,
+            taskTitle: (payload.new as any)?.title || (payload.old as any)?.title,
+            taskTeamId,
+            currentTeamId: currentTeam.id,
+            timestamp: new Date().toISOString(),
+            payload: payload,
+            hasNew: !!payload.new,
+            hasOld: !!payload.old
+          });
+          
+          // Filter by team ID
+          if (taskTeamId !== currentTeam.id) {
+            console.log('⏭️ Skipping event for different team:', { taskTeamId, currentTeamId: currentTeam.id });
+            return;
+          }
           
           // Skip if we've already processed this event
           if (processedEvents.has(eventKey)) {
-            console.log('Skipping duplicate real-time event:', eventKey);
+            console.log('⏭️ Skipping duplicate real-time event:', eventKey);
             return;
           }
           
@@ -598,7 +648,13 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             processedEvents.delete(eventKey);
           }, 5000);
           
-          console.log('Real-time task update:', payload.eventType, payload);
+          console.log('Real-time task update:', {
+            eventType: payload.eventType,
+            taskId: newId || oldId,
+            taskTitle: (payload.new as any)?.title || (payload.old as any)?.title,
+            payload: payload,
+            teamId: currentTeam.id
+          });
           setLastUpdate(new Date());
           
           if (payload.eventType === 'INSERT') {
@@ -613,18 +669,17 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                   .select(`
                     id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
                     handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
-                    assignee_id,
-                    users:assignee_id (id, name, email, avatar)
+                    assignee, assignee_id, assignee_avatar
                   `)
                   .eq('team_id', currentTeam.id)
-                  .order('position', { ascending: true });
+                  .order('created_at', { ascending: false });
 
                 if (error) {
                   console.error('Error refreshing tasks:', error);
                   return;
                 }
 
-                const transformedTasks = tasksData.map(task => ({
+                const transformedTasks = tasksData.map((task: any) => ({
                   ...task,
                   progress: '0/1',
                   assignee: task.users ? {
@@ -664,11 +719,46 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           } else if (payload.eventType === 'DELETE') {
             // Task deleted
             const deletedTask = payload.old as Task;
-            console.log('✅ Deleting task via real-time:', deletedTask.title);
-            setTasks(prev => prev.filter(task => task.id !== deletedTask.id));
+            console.log('✅ Deleting task via real-time:', {
+              deletedTask,
+              taskId: deletedTask?.id,
+              taskTitle: deletedTask?.title,
+              payloadOld: payload.old,
+              payloadNew: payload.new
+            });
+            setTasks(prev => {
+              const filteredTasks = prev.filter(task => task.id !== deletedTask.id);
+              console.log('Tasks after deletion:', {
+                beforeCount: prev.length,
+                afterCount: filteredTasks.length,
+                deletedTaskId: deletedTask.id
+              });
+              return filteredTasks;
+            });
+            
+            // Also trigger a local state update to ensure consistency
+            setLastUpdate(new Date());
           }
         }
       )
+      .on('broadcast', { event: 'test' }, (payload) => {
+        console.log('🧪 Real-time test message received:', payload);
+      })
+      .on('broadcast', { event: 'task-deleted' }, (payload) => {
+        console.log('🗑️ Real-time task deletion broadcast received:', payload);
+        // Force refresh tasks when deletion is broadcast
+        if (payload.payload && payload.payload.taskId) {
+          setTasks(prev => {
+            const filteredTasks = prev.filter(task => task.id !== payload.payload.taskId);
+            console.log('Broadcast deletion applied:', {
+              beforeCount: prev.length,
+              afterCount: filteredTasks.length,
+              deletedTaskId: payload.payload.taskId
+            });
+            return filteredTasks;
+          });
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -694,25 +784,69 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                 color: col.color,
                 position: col.order || index
               }));
-              console.log('✅ Updating columns via real-time:', columnsData.map(c => c.name));
+              console.log('✅ Updating columns via real-time:', columnsData.map((c: any) => c.name));
               setColumns(columnsData);
             }
           }
         }
       )
       .subscribe((status, err) => {
-        console.log('Real-time subscription status:', status);
+        console.log('Real-time subscription status:', {
+          status,
+          teamId: currentTeam.id,
+          channelName: `kanban-realtime-${currentTeam.id}`,
+          error: err
+        });
         if (err) {
-          console.error('Real-time subscription error:', err);
+          console.error('Real-time subscription error:', {
+            error: err,
+            errorMessage: err?.message,
+            errorCode: (err as any)?.code,
+            teamId: currentTeam.id
+          });
           setRealtimeStatus('disconnected');
         } else {
           if (status === 'SUBSCRIBED') {
             setRealtimeStatus('connected');
-            console.log('✅ Real-time connected successfully!');
+            console.log('✅ Real-time connected successfully!', {
+              teamId: currentTeam.id,
+              channelName: `kanban-realtime-${currentTeam.id}`
+            });
+            
+            // Test the subscription by sending a test message
+            console.log('🧪 Testing real-time subscription...');
+            channel.send({
+              type: 'broadcast',
+              event: 'test',
+              payload: { 
+                message: 'Real-time test from client', 
+                timestamp: Date.now(),
+                userId: user?.id || 'unknown',
+                teamId: currentTeam.id
+              }
+            });
+            
+            // Set up periodic real-time health check
+            const healthCheckInterval = setInterval(() => {
+              console.log('🏥 Real-time health check:', {
+                status: realtimeStatus,
+                teamId: currentTeam.id,
+                timestamp: new Date().toISOString()
+              });
+            }, 30000); // Every 30 seconds
+            
+            // Clean up interval on unmount
+            return () => {
+              clearInterval(healthCheckInterval);
+            };
           } else if (status === 'CHANNEL_ERROR') {
             setRealtimeStatus('disconnected');
+            console.log('❌ Real-time channel error');
           } else if (status === 'TIMED_OUT') {
             setRealtimeStatus('disconnected');
+            console.log('⏰ Real-time timed out');
+          } else {
+            console.log('🔄 Real-time status:', status);
           }
         }
       });
@@ -730,9 +864,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       try {
         console.log('🔄 Polling for tasks...', { 
           teamId: currentTeam.id,
-          supabaseInitialized: !!supabase,
-          supabaseUrl: supabase?.supabaseUrl || 'Not set',
-          supabaseKey: supabase?.supabaseKey ? 'Present' : 'Missing'
+          supabaseInitialized: !!supabase
         });
         
         if (!supabase) {
@@ -745,11 +877,10 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           .select(`
             id, title, description, priority, column_id, tags, due_date, created_at, position, team_id, 
             handoff_status, source_team_id, handoff_notes, handoff_requirements, handoff_at, status,
-            assignee_id,
-            users:assignee_id (id, name, email, avatar)
+            assignee, assignee_id, assignee_avatar
           `)
           .eq('team_id', currentTeam.id)
-          .order('updated_at', { ascending: false });
+          .order('created_at', { ascending: false });
 
         if (error) {
           console.error('❌ Polling error:', {
@@ -757,11 +888,10 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
             errorMessage: error?.message || 'No error message',
             errorCode: error?.code || 'No error code',
             errorDetails: error?.details || 'No error details',
-            errorHints: error?.hints || 'No error hints',
+            errorHints: error?.hint || 'No error hints',
             teamId: currentTeam.id,
             timestamp: new Date().toISOString(),
-            supabaseUrl: supabase.supabaseUrl,
-            supabaseKey: supabase.supabaseKey ? 'Present' : 'Missing'
+            supabaseInitialized: !!supabase
           });
           return;
         }
@@ -773,31 +903,21 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
         if (latestTasks) {
           setTasks(prev => {
-            // Transform tasks to include assignee data
-            const transformedTasks = latestTasks.map(task => ({
-              ...task,
-              progress: '0/1',
-              assignee: task.users ? {
-                name: task.users.name,
-                avatar: task.users.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(task.users.name)}&background=ff6b35&color=ffffff&size=128`
-              } : null
-            }));
-
             // Check for any changes in task positions or columns
-            const hasChanges = transformedTasks.some(newTask => {
+            const hasChanges = latestTasks.some((newTask: any) => {
               const oldTask = prev.find(old => old.id === newTask.id);
               if (!oldTask) return true; // New task
               
               return (
                 oldTask.column_id !== newTask.column_id ||
                 oldTask.position !== newTask.position ||
-                oldTask.updated_at !== newTask.updated_at
+                (oldTask.created_at !== newTask.created_at) // Use created_at as proxy for updates since updated_at might not be in the interface
               );
             });
             
             if (hasChanges) {
-              console.log('Polling detected changes, updating tasks with assignee data');
-              return ensureUniqueTasks(transformedTasks);
+              console.log('Polling detected changes, updating tasks');
+              return ensureUniqueTasks(latestTasks);
             }
             
             return prev;
@@ -980,9 +1100,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
                 id: col.id,
                 name: col.name,
                 color: col.color,
-                order: col.position,
-                isHandoffColumn: col.isHandoffColumn || false,
-                targetTeamId: col.targetTeamId
+                order: col.position
               }))
             };
 
@@ -1131,10 +1249,9 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       } catch (err) {
         console.error('Failed to reorder tasks - Raw error:', err);
         console.error('Failed to reorder tasks - Stringified:', JSON.stringify(err, null, 2));
-        console.error('Failed to reorder tasks - Error message:', err?.message || 'No message');
-        console.error('Failed to reorder tasks - Error details:', err?.details || 'No details');
-        console.error('Failed to reorder tasks - Error code:', err?.code || 'No code');
-        console.error('Failed to reorder tasks - Updates being made:', updates);
+        console.error('Failed to reorder tasks - Error message:', (err as any)?.message || 'No message');
+        console.error('Failed to reorder tasks - Error details:', (err as any)?.details || 'No details');
+        console.error('Failed to reorder tasks - Error code:', (err as any)?.code || 'No code');
         console.error('Failed to reorder tasks - Active task:', activeTask);
         
         // Revert local state on error
@@ -1275,7 +1392,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         console.log('🔄 Real-time update will sync across all connected clients');
         
         // Track task completion for streak
-        if (newStatus.isCompleted && user?.id === activeTask.assignee_id && trackTaskCompletion) {
+        if (newStatus.isCompleted && trackTaskCompletion) {
           await trackTaskCompletion(activeTask.id, true);
         }
         
@@ -1416,7 +1533,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         console.log('🔄 Real-time update will sync across all connected clients');
         
         // Track task completion for streak
-        if (newStatus.isCompleted && user?.id === activeTask.assignee_id && trackTaskCompletion) {
+        if (newStatus.isCompleted && trackTaskCompletion) {
           await trackTaskCompletion(activeTask.id, true);
         }
         
@@ -1437,11 +1554,104 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   };
 
   const getTasksForColumn = (columnId: string) => {
-    const filteredTasks = tasks
+    let filteredTasks = tasks
       .filter(task => task.column_id === columnId)
       .sort((a, b) => (a.position || 0) - (b.position || 0));
+    
+    // Filter by selected assignee if one is selected
+    if (selectedAssignee) {
+      if (selectedAssignee === 'unassigned') {
+        filteredTasks = filteredTasks.filter(task => !task.assignee_id);
+      } else {
+        filteredTasks = filteredTasks.filter(task => task.assignee_id === selectedAssignee);
+      }
+    }
+    
     console.log(`Tasks for column ${columnId}:`, filteredTasks);
     return filteredTasks;
+  };
+
+  // Fetch users from database
+  const fetchUsers = async () => {
+    try {
+      // Fetch all users from database
+      const { data: dbUsers, error } = await supabase
+        .from('users')
+        .select('id, name, email, avatar')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching users from database:', error);
+        // Fallback to current user only
+        if (user) {
+          const currentUser = [{
+            id: user.id,
+            name: user.fullName || user.firstName || 'User',
+            email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+            avatar: user.imageUrl || undefined
+          }];
+          setUsers(currentUser);
+        } else {
+          setUsers([]);
+        }
+        return;
+      }
+      
+      // Remove duplicates based on email (in case there are old entries)
+      const uniqueUsers = dbUsers?.reduce((acc: any[], current: any) => {
+        const existingUser = acc.find(user => user.email === current.email);
+        if (!existingUser) {
+          acc.push(current);
+        }
+        return acc;
+      }, []) || [];
+      
+      console.log('Fetched unique users from database:', uniqueUsers);
+      setUsers(uniqueUsers);
+    } catch (error) {
+      console.error('Error in fetchUsers:', error);
+      // Fallback to current user only
+      if (user) {
+        const currentUser = [{
+          id: user.id,
+          name: user.fullName || user.firstName || 'User',
+          email: user.primaryEmailAddress?.emailAddress || 'user@example.com',
+          avatar: user.imageUrl || undefined
+        }];
+        setUsers(currentUser);
+      } else {
+        setUsers([]);
+      }
+    }
+  };
+
+  // Get unique assignees from all tasks
+  const getUniqueAssignees = () => {
+    const assignees = new Set<string>();
+    const unassignedCount = tasks.filter(task => !task.assignee_id).length;
+    
+    tasks.forEach(task => {
+      if (task.assignee_id) {
+        assignees.add(task.assignee_id);
+      }
+    });
+    
+    return {
+      assignees: Array.from(assignees),
+      unassignedCount
+    };
+  };
+
+  // Get user name by ID
+  const getUserName = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    return user ? user.name : userId; // Fallback to ID if user not found
+  };
+
+  // Get user avatar by ID
+  const getUserAvatar = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    return user ? user.avatar : null;
   };
 
   const handleOpenTaskModal = (columnId?: string) => {
@@ -1649,8 +1859,8 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
 
   const handleTaskCreate = async (newTask: any) => {
     try {
-      // Use the teamId from props, or fall back to user's teamId, or current team
-      const effectiveTeamId = teamId || user?.teamId || currentTeam?.id;
+      // Use the teamId from props, or fall back to current team
+      const effectiveTeamId = teamId || currentTeam?.id;
       
       if (!effectiveTeamId) {
         throw new Error('No team ID available for task creation');
@@ -1680,10 +1890,12 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         description: newTask.description || null,
         status: initialStatus,
         priority: newTask.priority || 'medium',
-        assignee_id: newTask.assignee_id || null, // Use the assignee_id from the task creation modal
+        assignee: newTask.assignee || null,
+        assignee_id: newTask.assignee_id || null,
+        assignee_avatar: newTask.assignee_avatar || null,
         team_id: effectiveTeamId, // Use the effective team ID
         column_id: newTask.column_id || "backlog",
-        position: newTask.position || 0, // Try to include position field
+        position: newTask.position || 0, // Position for drag-and-drop ordering
         tags: newTask.tags || [],
         attachments: [],
         comments: [],
@@ -1700,7 +1912,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       // Debug logging
       console.log('=== TASK CREATION DEBUG ===');
       console.log('New task from modal:', newTask);
-      console.log('Assignee ID from modal:', newTask.assignee_id);
+      console.log('Assignee from modal:', newTask.assignee);
       console.log('Assignee name from modal:', newTask.assignee);
       console.log('Task data being inserted:', taskData);
       console.log('===========================');
@@ -1731,9 +1943,21 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       console.log('=== TASK CREATED SUCCESSFULLY ===');
       console.log('✅ Task created successfully:', data.title);
       console.log('Created task data:', data);
-      console.log('Assignee ID in created task:', data.assignee_id);
+      console.log('Created task ID:', data.id);
       console.log('🔄 Real-time update will sync across all connected clients');
       console.log('=================================');
+
+      // Show success toast notification
+      toast.success("Task created", {
+        description: `Your task "${data.title}" has been created.`,
+        action: {
+          label: "View",
+          onClick: () => {
+            // Scroll to the task or open task detail modal
+            console.log('View task clicked:', data.id);
+          }
+        }
+      });
 
       // Add the created task to local state - check for duplicates
       setTasks(prev => {
@@ -1747,6 +1971,229 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       
     } catch (err) {
       console.error('Failed to create task:', err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string, taskTitle: string) => {
+    console.log('handleDeleteTask called with:', { taskId, taskTitle });
+    try {
+      // Create a custom confirmation dialog
+      const confirmed = await new Promise<boolean>((resolve) => {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center';
+        overlay.style.zIndex = '99999';
+        overlay.style.pointerEvents = 'auto';
+        overlay.style.position = 'fixed';
+        
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.className = 'bg-white/95 backdrop-blur-md rounded-xl p-6 max-w-md mx-4 shadow-2xl border border-white/20 relative';
+        modal.style.pointerEvents = 'auto';
+        modal.style.position = 'relative';
+        modal.style.zIndex = '100000';
+        modal.innerHTML = `
+          <div class="flex items-center mb-4">
+            <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+              <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900">Delete Task</h3>
+          </div>
+          <p class="text-gray-600 mb-6">Are you sure you want to delete "<strong>${taskTitle}</strong>"? This action cannot be undone.</p>
+          <div class="flex justify-end space-x-3">
+            <button id="cancel-btn" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors cursor-pointer border border-gray-200 relative z-20" style="pointer-events: auto;">
+              Cancel
+            </button>
+            <button id="delete-btn" class="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors cursor-pointer border border-red-600 relative z-20" style="pointer-events: auto;">
+              Delete
+            </button>
+          </div>
+        `;
+        
+        overlay.appendChild(modal);
+        
+        // Add a style to prevent interaction with elements behind
+        const style = document.createElement('style');
+        style.textContent = `
+          .modal-overlay-${Date.now()} {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 99999 !important;
+            pointer-events: auto !important;
+          }
+        `;
+        overlay.className += ` modal-overlay-${Date.now()}`;
+        document.head.appendChild(style);
+        document.body.appendChild(overlay);
+        
+        // Add event listeners after a small delay to ensure DOM is ready
+        setTimeout(() => {
+          const cancelBtn = modal.querySelector('#cancel-btn') as HTMLButtonElement;
+          const deleteBtn = modal.querySelector('#delete-btn') as HTMLButtonElement;
+          
+          console.log('Found buttons:', { cancelBtn, deleteBtn });
+        
+        const cleanup = () => {
+            if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+            }
+            // Remove the style element
+            const styleElement = document.head.querySelector(`style`);
+            if (styleElement && styleElement.textContent?.includes('modal-overlay')) {
+              document.head.removeChild(styleElement);
+            }
+          };
+          
+          if (cancelBtn) {
+            const handleCancelClick = (e: Event) => {
+              console.log('Cancel button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+          cleanup();
+          resolve(false);
+            };
+            cancelBtn.addEventListener('click', handleCancelClick);
+            cancelBtn.addEventListener('mousedown', handleCancelClick);
+          }
+          
+          if (deleteBtn) {
+            const handleDeleteClick = (e: Event) => {
+              console.log('Delete button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+          cleanup();
+          resolve(true);
+            };
+            deleteBtn.addEventListener('click', handleDeleteClick);
+            deleteBtn.addEventListener('mousedown', handleDeleteClick);
+          }
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            cleanup();
+            resolve(false);
+          }
+        });
+          
+          // Prevent clicks from going through the modal
+          modal.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        
+        // Close on escape key
+        const handleEscape = (e: KeyboardEvent) => {
+          if (e.key === 'Escape') {
+            cleanup();
+            resolve(false);
+            document.removeEventListener('keydown', handleEscape);
+          }
+        };
+        document.addEventListener('keydown', handleEscape);
+        }, 10);
+      });
+      
+      if (!confirmed) {
+        return;
+      }
+
+      // Perform the actual deletion
+      await performTaskDeletion(taskId, taskTitle);
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      toast.error("Failed to delete task", {
+        description: "An unexpected error occurred."
+      });
+    }
+  };
+
+
+  const performTaskDeletion = async (taskId: string, taskTitle: string) => {
+    try {
+      console.log('Deleting task:', taskId);
+
+      // Delete task from database
+      console.log('🗑️ Attempting to delete task from database:', { taskId, taskTitle });
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) {
+        console.error('❌ Error deleting task from database:', {
+          error,
+          errorMessage: error.message,
+          errorCode: error.code,
+          taskId
+        });
+        toast.error("Failed to delete task", {
+          description: error.message
+        });
+        return;
+      }
+
+      console.log('✅ Task deleted from database successfully');
+      
+      // Send broadcast message to notify other users
+      console.log('📡 Broadcasting task deletion to other users...');
+      const channel = supabase.channel(`kanban-realtime-${currentTeam?.id}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'task-deleted',
+        payload: { 
+          taskId, 
+          taskTitle,
+          deletedBy: user?.id || 'unknown',
+          timestamp: Date.now()
+        }
+      });
+      console.log('✅ Task deletion broadcast sent successfully');
+      
+      // Update local state immediately for better UX
+      setTasks(prev => {
+        const filteredTasks = prev.filter(task => task.id !== taskId);
+        console.log('Local state updated after deletion:', {
+          beforeCount: prev.length,
+          afterCount: filteredTasks.length,
+          deletedTaskId: taskId
+        });
+        return filteredTasks;
+      });
+      
+      console.log('🔄 Local state updated, waiting for real-time confirmation...');
+
+      // Fallback: If real-time doesn't work within 2 seconds, update state manually
+      setTimeout(() => {
+        console.log('⏰ Real-time fallback: Manually updating state after 2 seconds');
+        setTasks(prev => {
+          const filteredTasks = prev.filter(task => task.id !== taskId);
+          console.log('Fallback state update:', {
+            beforeCount: prev.length,
+            afterCount: filteredTasks.length,
+            deletedTaskId: taskId
+          });
+          return filteredTasks;
+        });
+      }, 2000);
+
+      // Show success toast
+      toast.success("Task deleted", {
+        description: `"${taskTitle}" has been deleted.`
+      });
+
+      console.log('✅ Task deleted successfully:', taskTitle);
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      toast.error("Failed to delete task", {
+        description: "An unexpected error occurred."
+      });
     }
   };
 
@@ -1800,66 +2247,457 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
   }
 
   return (
-    <div className="flex-1 bg-gray-50">
-
-      {/* Kanban Board */}
-        <DndContext
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        measuring={{
-          droppable: {
-            strategy: 'always',
-          },
-        }}
-      >
-        <div className="p-6">
-          <div className="flex space-x-6 pb-4">
-            <SortableContext 
-              items={columns.map(col => col.id)}
-              strategy={horizontalListSortingStrategy}
-            >
-              {columns
-                .sort((a, b) => (a.position || 0) - (b.position || 0))
-                .map((column) => (
-                  <SortableColumn
-                    key={column.id}
-                    column={column}
-                    tasks={getTasksForColumn(column.id)}
-                    getPriorityColor={getPriorityColor}
-                    onAddTask={handleOpenTaskModal}
-                    onTaskClick={handleTaskClick}
-                    dropIndicator={dropIndicator}
-                    onEditColumn={(column) => {
-                      setSelectedColumn(column);
-                      setIsDeleteMode(false);
-                      setIsColumnEditModalOpen(true);
-                    }}
-                    onDeleteColumn={(column) => {
-                      setSelectedColumn(column);
-                      setIsDeleteMode(true);
-                      setIsColumnEditModalOpen(true);
-                    }}
-                  />
-                ))}
-            </SortableContext>
-            
-            {/* Add Section Button */}
-            <div className="flex-shrink-0 w-72 min-w-72">
+    <div className="flex-1 bg-gray-50 flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {/* View Switcher */}
+            <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
               <Button
-                variant="ghost" 
-                className="w-full h-12 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600"
-                onClick={() => setIsSectionModalOpen(true)}
+                variant={currentView === 'kanban' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-8 px-3 rounded-none border-0 ${currentView === 'kanban' ? 'bg-[#EEF6FF] text-gray-900 hover:bg-[#EEF6FF]' : ''}`}
+                onClick={() => setCurrentView('kanban')}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Add section
+                <div className="flex items-center space-x-1">
+                  <Columns3 className="w-3 h-3" />
+                  <span className="text-xs">Kanban</span>
+                </div>
               </Button>
-              
+              <Button
+                variant={currentView === 'calendar' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-8 px-3 rounded-none border-0 ${currentView === 'calendar' ? 'bg-[#EEF6FF] text-gray-900 hover:bg-[#EEF6FF]' : ''}`}
+                onClick={() => setCurrentView('calendar')}
+              >
+                <div className="flex items-center space-x-1">
+                  <Calendar className="w-3 h-3" />
+                  <span className="text-xs">Calendar</span>
+                </div>
+              </Button>
+              <Button
+                variant={currentView === 'gantt' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-8 px-3 rounded-none border-0 ${currentView === 'gantt' ? 'bg-[#EEF6FF] text-gray-900 hover:bg-[#EEF6FF]' : ''}`}
+                onClick={() => setCurrentView('gantt')}
+              >
+                <div className="flex items-center space-x-1">
+                  <BarChart4 className="w-3 h-3" />
+                  <span className="text-xs">Gantt</span>
+                </div>
+              </Button>
+              <Button
+                variant={currentView === 'table' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-8 px-3 rounded-none border-0 ${currentView === 'table' ? 'bg-[#EEF6FF] text-gray-900 hover:bg-[#EEF6FF]' : ''}`}
+                onClick={() => setCurrentView('table')}
+              >
+                <div className="flex items-center space-x-1">
+                  <Table className="w-3 h-3" />
+                  <span className="text-xs">Table</span>
+                </div>
+              </Button>
+            </div>
+
+            {/* Sort */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-gray-600 border-gray-200"
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M3 3a1 1 0 000 2h11.586l-4.293 4.293a1 1 0 101.414 1.414L16.414 7H18a1 1 0 100-2H3zM3 11a1 1 0 100 2h11.586l-4.293 4.293a1 1 0 101.414 1.414L16.414 15H18a1 1 0 100-2H3z" />
+                  </svg>
+                </div>
+                <span>Sort</span>
+              </div>
+            </Button>
+
+            {/* Filter */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-gray-600 border-gray-200"
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span>Filter</span>
+              </div>
+            </Button>
+
+            {/* Closed */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-gray-600 border-gray-200"
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span>Closed</span>
+              </div>
+            </Button>
+
+            {/* Assignee */}
+            <Sheet open={isAssigneeSheetOpen} onOpenChange={setIsAssigneeSheetOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`h-8 px-3 border-gray-200 ${
+                    selectedAssignee 
+                      ? 'text-blue-600 border-blue-300 bg-blue-50' 
+                      : 'text-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 flex items-center justify-center">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                      </svg>
+                    </div>
+                    <span>Assignee</span>
+                    {selectedAssignee && (
+                      <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                    )}
+                  </div>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80">
+                <SheetHeader className="px-6">
+                  <SheetTitle>Assignees</SheetTitle>
+                </SheetHeader>
+                <div className="mt-6 px-6">
+                  {/* Search */}
+                  <div className="relative mb-4">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search by user or team"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* People Section */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">People {getUniqueAssignees().assignees.length + (getUniqueAssignees().unassignedCount > 0 ? 1 : 0)}</h3>
+                    <div className="space-y-2">
+                      {/* Unassigned */}
+                      {getUniqueAssignees().unassignedCount > 0 && (
+                        <div 
+                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-gray-50 ${
+                            selectedAssignee === 'unassigned' ? 'bg-blue-50 border border-blue-200' : ''
+                          }`}
+                          onClick={() => setSelectedAssignee(selectedAssignee === 'unassigned' ? null : 'unassigned')}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">Unassigned</div>
+                              <div className="text-xs text-gray-500">{getUniqueAssignees().unassignedCount}</div>
+                            </div>
+                          </div>
+                          <div className={`w-4 h-4 border-2 rounded ${
+                            selectedAssignee === 'unassigned' ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                          }`}>
+                            {selectedAssignee === 'unassigned' && (
+                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Assigned Users */}
+                      {getUniqueAssignees().assignees.map((assigneeId) => {
+                        const assigneeTasks = tasks.filter(task => task.assignee_id === assigneeId);
+                        const assigneeName = getUserName(assigneeId);
+                        const assigneeAvatar = getUserAvatar(assigneeId);
+                        const initials = assigneeName.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2);
+                        
+                        return (
+                          <div 
+                            key={assigneeId}
+                            className={`flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-gray-50 ${
+                              selectedAssignee === assigneeId ? 'bg-blue-50 border border-blue-200' : ''
+                            }`}
+                            onClick={() => setSelectedAssignee(selectedAssignee === assigneeId ? null : assigneeId)}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
+                                {assigneeAvatar ? (
+                                  <img 
+                                    src={assigneeAvatar} 
+                                    alt={assigneeName}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      (e.currentTarget.nextElementSibling as HTMLElement)!.style.display = 'flex';
+                                    }}
+                                  />
+                                ) : null}
+                                <span className="text-white text-sm font-medium" style={{ display: assigneeAvatar ? 'none' : 'flex' }}>
+                                  {initials}
+                                </span>
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{assigneeName}</div>
+                                <div className="text-xs text-gray-500">{assigneeTasks.length}</div>
+                              </div>
+                            </div>
+                            <div className={`w-4 h-4 border-2 rounded ${
+                              selectedAssignee === assigneeId ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                            }`}>
+                              {selectedAssignee === assigneeId && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Teams Section */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">Teams 0</h3>
+                    <div className="text-sm text-gray-500">No teams available</div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm text-gray-600">Assigned comments</span>
+                        <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="flex items-center">
+                        <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                          <span className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            {/* N Icon */}
+            <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-sm font-medium">N</span>
             </div>
           </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Search */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 text-gray-600 border-gray-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </Button>
+
+            {/* Customize */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-gray-600 border-gray-200"
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span>Customize</span>
+              </div>
+            </Button>
+
+            {/* Add Task */}
+            <Button
+              size="sm"
+              className="h-8 px-3 text-white hover:opacity-90"
+              style={{ backgroundColor: '#990FFA' }}
+              onClick={() => handleOpenTaskModal(undefined)}
+            >
+              <div className="flex items-center space-x-2">
+                <span>Add Task</span>
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </Button>
+          </div>
         </div>
-      </DndContext>
+      </div>
+
+      {/* Dynamic View Content */}
+      <div className="flex-1 overflow-auto">
+        {/* Kanban View */}
+        {currentView === 'kanban' && (
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="p-6">
+              <div className="flex space-x-6 pb-4">
+                <SortableContext 
+                  items={columns.map(col => col.id)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {columns
+                    .sort((a, b) => (a.position || 0) - (b.position || 0))
+                    .map((column) => (
+                      <SortableColumn
+                        key={column.id}
+                        column={column}
+                        tasks={getTasksForColumn(column.id)}
+                        getPriorityColor={getPriorityColor}
+                        onAddTask={handleOpenTaskModal}
+                        onTaskClick={handleTaskClick}
+                        onDeleteTask={handleDeleteTask}
+                        dropIndicator={dropIndicator}
+                        onEditColumn={(column) => {
+                          setSelectedColumn(column);
+                          setIsDeleteMode(false);
+                          setIsColumnEditModalOpen(true);
+                        }}
+                        onDeleteColumn={(column) => {
+                          setSelectedColumn(column);
+                          setIsDeleteMode(true);
+                          setIsColumnEditModalOpen(true);
+                        }}
+                      />
+                    ))}
+                </SortableContext>
+                
+                {/* Add Section Button */}
+                <div className="flex-shrink-0 w-72 min-w-72">
+                  <Button
+                    variant="ghost" 
+                    className="w-full h-12 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600"
+                    onClick={() => setIsSectionModalOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add section
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DndContext>
+        )}
+
+        {/* Calendar View */}
+        {currentView === 'calendar' && (
+          <div className="h-full">
+            <CalendarView 
+              tasks={tasks as any}
+              onTaskClick={handleTaskClick as any}
+              onAddTask={handleOpenTaskModal}
+            />
+          </div>
+        )}
+
+        {/* Gantt View */}
+        {currentView === 'gantt' && (
+          <div className="h-full">
+            <GanttView 
+              tasks={tasks as any}
+              onTaskClick={handleTaskClick as any}
+              onAddTask={handleOpenTaskModal}
+            />
+          </div>
+        )}
+
+        {/* Table View */}
+        {currentView === 'table' && (
+          <div className="p-6">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {tasks.map((task) => (
+                      <tr key={task.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleTaskClick(task)}>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                          {task.description && (
+                            <div className="text-sm text-gray-500">{task.description}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {columns.find(col => col.id === task.column_id)?.name || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                            {task.priority}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {task.assignee ? (
+                            <div className="flex items-center">
+                              <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                                <User className="w-3 h-3 text-gray-600" />
+                              </div>
+                              {typeof task.assignee === 'object' ? task.assignee.name : task.assignee}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       
       {/* Task Creation Modal */}
       <TaskCreationModal
@@ -1876,7 +2714,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
       <SectionCreationModal
         isOpen={isSectionModalOpen}
         onClose={() => setIsSectionModalOpen(false)}
-        teamId={teamId || user?.teamId || currentTeam?.id || ''}
+        teamId={teamId || currentTeam?.id || ''}
         onSectionCreated={refreshColumns}
       />
 
@@ -1888,7 +2726,7 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
           setSelectedColumn(null);
           setIsDeleteMode(false);
         }}
-        teamId={teamId || user?.teamId || currentTeam?.id || ''}
+        teamId={teamId || currentTeam?.id || ''}
         column={selectedColumn}
         onColumnUpdated={refreshColumns}
         onColumnDeleted={refreshColumns}
@@ -1905,9 +2743,11 @@ export function TodoistKanban({ teamId, showLoading = true }: TodoistKanbanProps
         task={selectedTask}
         onTaskUpdate={handleTaskUpdate}
         onHandoff={handleHandoff}
+        onDelete={(taskId, taskTitle) => handleDeleteTask(taskId, taskTitle)}
         teams={teams}
         currentTeam={currentTeam}
       />
+
 
       {/* Streak Celebration Popup */}
       <StreakCelebrationPopup
@@ -1927,6 +2767,7 @@ interface SortableColumnProps {
   getPriorityColor: (priority: Task['priority']) => string;
   onAddTask: (columnId: string) => void;
   onTaskClick: (task: Task) => void;
+  onDeleteTask: (taskId: string, taskTitle: string) => void;
   dropIndicator?: {
     columnId: string;
     position: number;
@@ -1936,7 +2777,7 @@ interface SortableColumnProps {
   onDeleteColumn: (column: any) => void;
 }
 
-function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator, onEditColumn, onDeleteColumn }: SortableColumnProps) {
+function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, onDeleteTask, dropIndicator, onEditColumn, onDeleteColumn }: SortableColumnProps) {
   const {
     attributes,
     listeners,
@@ -1969,21 +2810,37 @@ function SortableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClic
     >
       <DroppableColumn
         column={column}
-        tasks={(() => {
+        tasks=        {(() => {
           const columnTasks = tasks.filter(task => task.column_id === column.id);
+          
+          // Sort tasks to prioritize handed-off tasks at the top
+          const sortedTasks = columnTasks.sort((a, b) => {
+            const aIsHandover = a.handoff_status === 'handed_off' || a.handoff_status === 'accepted' || a.source_team_id;
+            const bIsHandover = b.handoff_status === 'handed_off' || b.handoff_status === 'accepted' || b.source_team_id;
+            
+            // Handed-off tasks come first
+            if (aIsHandover && !bIsHandover) return -1;
+            if (!aIsHandover && bIsHandover) return 1;
+            
+            // Within each group, sort by creation date (newest first)
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+          
           console.log(`🔍 Column ${column.id} (${column.name}):`, {
             totalTasks: tasks.length,
-            columnTasks: columnTasks.length,
-            taskIds: columnTasks.map(t => t.id),
-            duplicateCheck: columnTasks.filter((task, index, self) => 
+            columnTasks: sortedTasks.length,
+            taskIds: sortedTasks.map(t => t.id),
+            handoverTasks: sortedTasks.filter(t => t.handoff_status === 'handed_off' || t.handoff_status === 'accepted' || t.source_team_id).length,
+            duplicateCheck: sortedTasks.filter((task, index, self) => 
               index !== self.findIndex(t => t.id === task.id)
             ).length
           });
-          return columnTasks;
+          return sortedTasks;
         })()}
         getPriorityColor={getPriorityColor}
         onAddTask={onAddTask}
         onTaskClick={onTaskClick}
+        onDeleteTask={onDeleteTask}
         dropIndicator={dropIndicator}
         dragListeners={listeners}
         onEditColumn={onEditColumn}
@@ -2000,6 +2857,7 @@ interface DroppableColumnProps {
   getPriorityColor: (priority: Task['priority']) => string;
   onAddTask: (columnId: string) => void;
   onTaskClick: (task: Task) => void;
+  onDeleteTask: (taskId: string, taskTitle: string) => void;
   dropIndicator?: {
     columnId: string;
     position: number;
@@ -2010,7 +2868,7 @@ interface DroppableColumnProps {
   onDeleteColumn: (column: any) => void;
 }
 
-function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, dropIndicator, dragListeners, onEditColumn, onDeleteColumn }: DroppableColumnProps) {
+function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskClick, onDeleteTask, dropIndicator, dragListeners, onEditColumn, onDeleteColumn }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
   });
@@ -2114,6 +2972,7 @@ function DroppableColumn({ column, tasks, getPriorityColor, onAddTask, onTaskCli
                 task={task}
                 priorityColor={getPriorityColor(task.priority)}
                 onTaskClick={onTaskClick}
+                onDeleteTask={onDeleteTask}
               />
             </React.Fragment>
           ))}
@@ -2146,9 +3005,23 @@ interface SortableTaskItemProps {
   task: Task;
   priorityColor: string;
   onTaskClick: (task: Task) => void;
+  onDeleteTask: (taskId: string, taskTitle: string) => void;
 }
 
-function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItemProps) {
+function SortableTaskItem({ task, priorityColor, onTaskClick, onDeleteTask }: SortableTaskItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+      }
+    };
+  }, [hoverTimeout]);
+  
   const {
     attributes,
     listeners,
@@ -2192,9 +3065,16 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
     }
   };
 
-  const handleMouseUp = () => {
-    // If no movement was detected, treat as click
-    if (!hasMoved && isMouseDown) {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // Check if the click was on the menu or menu trigger
+    const target = e.target as HTMLElement;
+    const isMenuClick = target.closest('[data-dropdown-menu]') || 
+                       target.closest('[data-dropdown-trigger]') ||
+                       target.closest('.dropdown-menu') ||
+                       target.closest('[role="menuitem"]');
+    
+    // If no movement was detected and it's not a menu click, treat as task click
+    if (!hasMoved && isMouseDown && !isMenuClick) {
       onTaskClick(task);
     }
     
@@ -2215,7 +3095,7 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
     <div
       ref={setNodeRef}
       style={style}
-      className={`drag-item task-item bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all duration-200 ${
+      className={`drag-item task-item bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all duration-200 relative ${
         isDragging 
           ? 'dragging opacity-60 shadow-2xl border-blue-300 bg-blue-50 scale-105 cursor-grabbing' 
           : isMouseDown && hasMoved
@@ -2225,7 +3105,25 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={() => {
+        if (hoverTimeout) {
+          clearTimeout(hoverTimeout);
+          setHoverTimeout(null);
+        }
+        setIsHovered(true);
+      }}
+      onMouseLeave={(e) => {
+        handleMouseLeave();
+        // Only hide if we're not moving to the menu
+        if (!e.relatedTarget || !(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) {
+          const timeout = setTimeout(() => {
+            if (!isMenuOpen) {
+              setIsHovered(false);
+            }
+          }, 100);
+          setHoverTimeout(timeout);
+        }
+      }}
       {...attributes}
       {...listeners}
     >
@@ -2274,44 +3172,150 @@ function SortableTaskItem({ task, priorityColor, onTaskClick }: SortableTaskItem
               )}
             </div>
             
-            <div className="flex items-center space-x-1">
-              {/* Tags */}
-              {task.tags.length > 0 && (
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs bg-blue-100 text-blue-700"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {task.tags[0]}
-                </Badge>
-              )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1 min-w-0 flex-1">
+                {(() => {
+                  const hasHandover = task.handoff_status === 'handed_off' || task.handoff_status === 'accepted' || task.source_team_id;
+                  const totalBadges = (hasHandover ? 1 : 0) + task.tags.length;
+                  
+                  // If we have handover badge, hide other badges and show total count
+                  if (hasHandover) {
+                    const hiddenBadges = task.tags.length;
+                    return (
+                      <>
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-orange-100 text-orange-700 border-orange-200 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Handover
+                        </Badge>
+                        {hiddenBadges > 0 && (
+                          <Badge 
+                            variant="secondary" 
+                            className="text-xs bg-gray-100 text-gray-600 flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            +{hiddenBadges}
+                          </Badge>
+                        )}
+                      </>
+                    );
+                  }
+                  
+                  // If no handover badge, show tags normally
+                  return (
+                    <>
+                      {task.tags.length > 0 && (
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-blue-100 text-blue-700 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {task.tags[0]}
+                        </Badge>
+                      )}
+                      {task.tags.length > 1 && (
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-gray-100 text-gray-600 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          +{task.tags.length - 1}
+                        </Badge>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
               
-              {/* Assignee Avatar */}
-              {task.assignee ? (
-                <div 
-                  className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Avatar className="w-5 h-5">
-                    <AvatarImage src={task.assignee.avatar} />
-                    <AvatarFallback className="text-xs">
-                      {task.assignee.name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-              ) : (
-                <div 
-                  className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center"
-                  onClick={(e) => e.stopPropagation()}
-                  title="No assignee"
-                >
-                  <User className="w-3 h-3 text-gray-400" />
-                </div>
-              )}
+              {/* Assignee Avatar - Always visible on the right */}
+              <div className="flex-shrink-0 ml-2">
+                {task.assignee || task.assignee_avatar ? (
+                  <div 
+                    className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ClerkAvatar
+                      assigneeId={task.assignee_id}
+                      assigneeName={typeof task.assignee === 'object' ? task.assignee?.name : task.assignee}
+                      assigneeAvatar={task.assignee_avatar}
+                      className="w-5 h-5"
+                      size="sm"
+                    />
+                  </div>
+                ) : (
+                  <div 
+                    className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center"
+                    onClick={(e) => e.stopPropagation()}
+                    title="No assignee"
+                  >
+                    <User className="w-3 h-3 text-gray-400" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Hover Menu */}
+      {isHovered && (
+        <div 
+          className="absolute top-2 right-2 z-10"
+          data-dropdown-menu
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => {
+            // Keep menu open when hovering over it
+            if (!isMenuOpen) {
+              setIsHovered(false);
+            }
+          }}
+        >
+          <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 hover:bg-gray-100"
+                data-dropdown-trigger
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48" data-dropdown-content>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // TODO: Implement edit functionality
+                  console.log('Edit task:', task.id);
+                }}
+                className="cursor-pointer"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Task
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteTask(task.id, task.title);
+                  setIsMenuOpen(false);
+                }}
+                className="cursor-pointer text-red-600 focus:text-red-600 hover:text-red-600"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Task
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   );
 }

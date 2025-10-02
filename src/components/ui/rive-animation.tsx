@@ -43,7 +43,7 @@ export const RiveAnimation: React.FC<RiveAnimationProps> = ({
         },
         onLoadError: (error) => {
           console.error('Rive animation failed to load:', error);
-          onError?.(error);
+          onError?.(error as unknown as Error);
         },
       });
 

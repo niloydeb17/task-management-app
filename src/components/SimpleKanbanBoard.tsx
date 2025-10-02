@@ -16,7 +16,8 @@ import {
   MessageSquare,
   Paperclip,
   GripVertical,
-  Settings
+  Settings,
+  ArrowRight
 } from "lucide-react";
 import LoaderOne from "@/components/ui/loader-one";
 import { supabase } from "@/lib/supabase";
@@ -32,6 +33,13 @@ interface Task {
   tags: string[];
   due_date?: string;
   created_at: string;
+  assignee?: {
+    name: string;
+    avatar: string;
+  } | null;
+  handoff_status?: string;
+  source_team_id?: string;
+  progress?: string;
 }
 
 interface Column {
@@ -41,12 +49,29 @@ interface Column {
 }
 
 export function SimpleKanbanBoard() {
-  const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = useStreakTracking();
+  const streakHook = useStreakTracking();
+  const { streakData, showStreakPopup, closeStreakPopup, trackTaskCompletion } = streakHook;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [currentTeamId, setCurrentTeamId] = useState<string>('dummy-team-id');
+  
+  // Debug: Check if variables are available
+  console.log('SimpleKanbanBoard - showStreakPopup:', showStreakPopup);
+  console.log('SimpleKanbanBoard - closeStreakPopup:', closeStreakPopup);
+  
+  // Explicit type annotations to help TypeScript
+  const isOpen = showStreakPopup;
+  const onClose = closeStreakPopup;
+  
+  // Debug: Check if new variables are available
+  console.log('SimpleKanbanBoard - isOpen:', isOpen);
+  console.log('SimpleKanbanBoard - onClose:', onClose);
+  
+  // Debug: Check if hook is working
+  console.log('SimpleKanbanBoard - streakHook:', streakHook);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -66,7 +91,7 @@ export function SimpleKanbanBoard() {
         }
         
         let teamData;
-        let columnsData;
+        let columnsData: any[] = [];
         let tasksData = [];
         
         if (!teamsData || teamsData.length === 0) {
@@ -142,6 +167,7 @@ export function SimpleKanbanBoard() {
           ];
         } else {
           teamData = teamsData[0];
+          setCurrentTeamId(teamData.id);
           
           // Extract columns from board template
           const boardTemplate = teamData.board_template;
@@ -231,7 +257,7 @@ export function SimpleKanbanBoard() {
                     assignee_id,
                     users:assignee_id (id, name, email, avatar)
                   `)
-                  .eq('team_id', currentTeam.id)
+                  .eq('team_id', currentTeamId)
                   .order('position', { ascending: true });
 
                 if (error) {
@@ -239,7 +265,7 @@ export function SimpleKanbanBoard() {
                   return;
                 }
 
-                const transformedTasks = tasksData.map(task => ({
+                const transformedTasks = tasksData.map((task: any) => ({
                   ...task,
                   progress: '0/1',
                   assignee: task.users ? {
@@ -399,7 +425,20 @@ export function SimpleKanbanBoard() {
   };
 
   const getTasksForColumn = (columnId: string) => {
-    return tasks.filter(task => task.column_id === columnId);
+    const columnTasks = tasks.filter(task => task.column_id === columnId);
+    
+    // Sort tasks to prioritize handed-off tasks at the top
+    return columnTasks.sort((a, b) => {
+      const aIsHandover = a.handoff_status === 'handed_off' || a.handoff_status === 'accepted' || a.source_team_id;
+      const bIsHandover = b.handoff_status === 'handed_off' || b.handoff_status === 'accepted' || b.source_team_id;
+      
+      // Handed-off tasks come first
+      if (aIsHandover && !bIsHandover) return -1;
+      if (!aIsHandover && bIsHandover) return 1;
+      
+      // Within each group, sort by creation date (newest first)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
   };
 
   const getPriorityColor = (priority: Task['priority']) => {
@@ -636,24 +675,70 @@ function SortableTaskItem({ task, priorityColor }: SortableTaskItemProps) {
               )}
             </div>
             
-            <div className="flex items-center space-x-1">
-              {/* Tags */}
-              {task.tags.length > 0 && (
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs bg-blue-100 text-blue-700"
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1 min-w-0 flex-1">
+                {(() => {
+                  const hasHandover = task.handoff_status === 'handed_off' || task.handoff_status === 'accepted' || task.source_team_id;
+                  
+                  // If we have handover badge, hide other badges and show total count
+                  if (hasHandover) {
+                    const hiddenBadges = task.tags.length;
+                    return (
+                      <>
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-orange-100 text-orange-700 border-orange-200 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Handover
+                        </Badge>
+                        {hiddenBadges > 0 && (
+                          <Badge 
+                            variant="secondary" 
+                            className="text-xs bg-gray-100 text-gray-600 flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            +{hiddenBadges}
+                          </Badge>
+                        )}
+                      </>
+                    );
+                  }
+                  
+                  // If no handover badge, show tags normally
+                  return (
+                    <>
+                      {task.tags.length > 0 && (
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-blue-100 text-blue-700 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {task.tags[0]}
+                        </Badge>
+                      )}
+                      {task.tags.length > 1 && (
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-gray-100 text-gray-600 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          +{task.tags.length - 1}
+                        </Badge>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+              
+              {/* Assignee Avatar - Always visible on the right */}
+              <div className="flex-shrink-0 ml-2">
+                <div 
+                  className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {task.tags[0]}
-                </Badge>
-              )}
-              
-              {/* Assignee Avatar */}
-              <div 
-                className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <User className="w-3 h-3 text-gray-600" />
+                  <User className="w-3 h-3 text-gray-600" />
+                </div>
               </div>
             </div>
           </div>
@@ -662,10 +747,10 @@ function SortableTaskItem({ task, priorityColor }: SortableTaskItemProps) {
 
       {/* Streak Celebration Popup */}
       <StreakCelebrationPopup
-        isOpen={showStreakPopup}
-        onClose={closeStreakPopup}
-        currentStreak={streakData.currentStreak}
-        completedTasks={streakData.completedTasksToday}
+        isOpen={false}
+        onClose={() => {}}
+        currentStreak={0}
+        completedTasks={0}
       />
     </div>
   );

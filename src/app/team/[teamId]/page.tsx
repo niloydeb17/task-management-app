@@ -3,14 +3,10 @@
 import { use } from 'react';
 import { TodoistSidebar } from "@/components/TodoistSidebar";
 import { TodoistKanban } from "@/components/TodoistKanban";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Share, Eye, Settings, User, LogOut, Flame } from "lucide-react";
-import { signOut } from "@/lib/auth-client";
-import { useState } from "react";
+import { UserButton } from "@clerk/nextjs";
+import { Share, Eye, Settings, Flame } from "lucide-react";
+import { useState, useEffect } from "react";
 import { PackageTrackerCard, PackageTrackerCardProps } from "@/components/ui/tracker-card";
 import { RiveAnimation } from "@/components/ui/rive-animation";
 
@@ -29,15 +25,20 @@ const PolandFlag = () => (
 );
 
 function TeamPageContent({ params }: TeamPageProps) {
-  const { user, signOut: authSignOut } = useAuth();
   const resolvedParams = use(params);
   const [isPackageTrackerOpen, setIsPackageTrackerOpen] = useState(false);
 
+  const user = {
+    name: "User",
+    email: "user@example.com",
+    image: null
+  };
+
   const userData = {
-    name: user?.name || "User",
-    email: user?.email || "",
+    name: "User",
+    email: "user@example.com",
     teamId: resolvedParams.teamId,
-    role: user?.role || "member"
+    role: "member"
   };
 
   // Streak Card Props
@@ -93,76 +94,10 @@ function TeamPageContent({ params }: TeamPageProps) {
     onTrackClick: undefined, // Remove button
   };
 
-  const handleSignOut = async () => {
-    try {
-      console.log('Attempting to sign out...');
-      
-      // Clear AuthProvider state first
-      authSignOut();
-      
-      // Clear Google OAuth cookies (these are what AuthProvider uses)
-      if (typeof document !== 'undefined') {
-        // Clear specific Google OAuth cookies
-        const cookiesToClear = [
-          'google_auth',
-          'user_name', 
-          'user_email',
-          'user_image',
-          'better-auth.session-token',
-          'better-auth.csrf-token'
-        ];
-        
-        cookiesToClear.forEach(cookieName => {
-          // Clear cookie for current path
-          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-          // Clear cookie for root path
-          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
-          // Clear cookie for subdomain
-          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname};`;
-        });
-        
-        console.log('Cleared Google OAuth cookies');
-      }
-      
-      // Clear local storage
-      if (typeof localStorage !== 'undefined') {
-        localStorage.clear();
-        console.log('Cleared localStorage');
-      }
-      
-      // Clear session storage
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.clear();
-        console.log('Cleared sessionStorage');
-      }
-      
-      // Try BetterAuth signOut with timeout
-      try {
-        const signOutPromise = signOut();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('SignOut timeout')), 2000)
-        );
-        
-        await Promise.race([signOutPromise, timeoutPromise]);
-        console.log('BetterAuth sign out successful');
-      } catch (authError) {
-        console.log('BetterAuth sign out failed, but continuing with cleanup:', authError);
-      }
-      
-      console.log('Sign out complete, redirecting...');
-      
-      // Force redirect to home page
-      if (typeof window !== 'undefined') {
-        window.location.href = '/';
-      }
-      
-    } catch (error) {
-      console.error('Sign out error:', error);
-      
-      // Last resort: force redirect
-      if (typeof window !== 'undefined') {
-        window.location.href = '/';
-      }
+  const handleSignOut = () => {
+    // Simple redirect to home page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
     }
   };
 
@@ -194,49 +129,13 @@ function TeamPageContent({ params }: TeamPageProps) {
             <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4" />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage 
-                      src={user?.image || ''} 
-                      alt={user?.name || user?.email || ''}
-                      onError={(e) => {
-                        console.log('Avatar image failed to load:', user?.image);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <AvatarFallback className="bg-orange-500 text-white text-sm font-medium">
-                      {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user?.email || 'user@example.com'}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <UserButton 
+              appearance={{
+                elements: {
+                  avatarBox: "h-8 w-8"
+                }
+              }}
+            />
           </div>
         </div>
       </div>
@@ -270,9 +169,5 @@ function TeamPageContent({ params }: TeamPageProps) {
 }
 
 export default function TeamPage({ params }: TeamPageProps) {
-  return (
-    <ProtectedRoute>
-      <TeamPageContent params={params} />
-    </ProtectedRoute>
-  );
+  return <TeamPageContent params={params} />;
 }
